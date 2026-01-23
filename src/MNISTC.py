@@ -6,43 +6,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app_sotsuron import app_MNIST_C as appNIST
-from app_sotsuron import brendel_random_mnist_utils as bu
-
-import numpy as np
-
-def load_and_preprocess(image_file_name, label_file_name, data_dir="data", num_classes=10):
-    """
-    指定された画像とラベルのnpyファイルを読み込み、
-    機械学習モデルに入力可能な形式に成形して返します。
-
-    Parameters:
-    image_file_path (str): 画像データのファイルパス (.npy)
-    label_file_path (str): ラベルデータのファイルパス (.npy)
-    num_classes (int): 分類するクラスの数 (デフォルトは10)
-
-    Returns:
-    X (numpy.ndarray): (サンプル数, 784) に成形された画像データ
-    y (numpy.ndarray): (サンプル数, num_classes) にOne-hot化されたラベルデータ
-    """
-    image_path = os.path.join(data_dir, image_file_name)
-    label_path = os.path.join(data_dir, label_file_name)
-
-    # ファイルの読み込み
-    images = np.load(image_path)
-    labels = np.load(label_path)
-
-    # 1. 画像データの成形
-    # 元の形状 (N, 28, 28, 1) を (N, 784) に変換
-    # -1 を指定すると、元の要素数に合わせて自動的に次元サイズが計算されます
-    X = images.reshape(images.shape[0], -1)
-    
-    # 2. ラベルデータの成形 (One-hot Encoding)
-    # (N,) の整数ラベルを (N, num_classes) のOne-hotベクトルに変換
-    # 例: ラベル 3 -> [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-    y = np.eye(num_classes)[labels]
-    
-    return X, y
+from app import appMNIST as appNIST
 
 if __name__ == "__main__":
     # ---------------------------------------------------------
@@ -71,7 +35,7 @@ if __name__ == "__main__":
     
     # 保存先設定
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(identity-cannyedges mu=0.02)")
-    base_save_dir = Path("results_sotsuron")
+    base_save_dir = Path("results")
     current_save_dir = base_save_dir / timestamp
     current_save_dir.mkdir(parents=True, exist_ok=True)
     
@@ -82,8 +46,8 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X_train, y_train = load_and_preprocess("identity_test_images.npy", "identity_test_labels.npy")
-    X_test, y_test = load_and_preprocess("cannyedges_test_images.npy", "cannyedges_test_labels.npy")
+    X_train, y_train = appNIST.load_and_preprocess("identity_train_images.npy", "identity_train_labels.npy")
+    X_test, y_test = appNIST.load_and_preprocess("cannyedges_test_images.npy", "cannyedges_test_labels.npy")
 
     # 確認
     print(f"Set 1 shape: {X_train.shape}") 
@@ -93,10 +57,10 @@ if __name__ == "__main__":
     # Set 1: Learning with Plots
     # ---------------------------------------------------------
     print("--- Phase 1: Learning on Set 1 ---")
-    F_initial, C_initial, W_out_initial = bu.init_weights(Nx, Nneuron, Nclasses)
+    F_initial, C_initial, W_out_initial = appNIST.init_weights(Nx, Nneuron, Nclasses)
 
-    acc_hist_1, spk_t_1, spk_i_1, F_set1, C_set1, W_out_set1 = bu.train_readout_mnistc_Retrain(
-    F_initial, C_initial, W_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, epsf, epsr, alpha, beta, mu, 
+    acc_hist_1, spk_t_1, spk_i_1, F_set1, C_set1, W_out_set1 = appNIST.train_readout_mnistc_Retrain(
+    F_initial, C_initial, W_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, epsf, epsr, alpha, beta, mu,
     Duration=Duration, lr_readout=lr_readout
     )
     
@@ -105,7 +69,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("--- Phase 2: Learning on Set 2 ---")
 
-    acc_hist_2, spk_t_2, spk_i_2, *_ = bu.train_readout_mnistc_Retrain(
+    acc_hist_2, spk_t_2, spk_i_2, *_ = appNIST.train_readout_mnistc_Retrain(
     F_set1, C_set1, W_out_set1, X_test, y_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, epsf, epsr, alpha, beta, mu, 
     Duration=Duration, lr_readout=lr_readout
     )
@@ -173,7 +137,7 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.legend()
     
-    acc_plot_path = current_save_dir / "Final_Accuracy_Combined_Smoothed.png"
+    acc_plot_path = current_save_dir / "Final_Accuracy_Smoothed.png"
     plt.savefig(acc_plot_path)
     plt.close()
     print(f"Accuracy plot saved to: {acc_plot_path}")
@@ -197,7 +161,7 @@ if __name__ == "__main__":
     plt.ylim(0, Nneuron)
     plt.legend(loc='upper right')
 
-    raster_plot_path = current_save_dir / "Final_Raster_Combined.png"
+    raster_plot_path = current_save_dir / "Final_Raster.png"
     plt.savefig(raster_plot_path)
     plt.close()
     print(f"Raster plot saved to: {raster_plot_path}")
