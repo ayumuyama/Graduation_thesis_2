@@ -6,7 +6,8 @@ def init_weights(Nx, Nneuron, Nclasses):
     F = F / (np.sqrt(np.sum(F**2, axis=0)) + 1e-8)
     C = -0.2 * np.random.rand(Nneuron, Nneuron) - 0.5 * np.eye(Nneuron)
     W_out = np.zeros((Nclasses, Nneuron))
-    return F, C, W_out
+    b_out = np.zeros(Nclasses)
+    return F, C, W_out, b_out
 
 def load_and_preprocess(image_file_name, label_file_name, data_dir="data", num_classes=10):
     """
@@ -41,7 +42,7 @@ def load_and_preprocess(image_file_name, label_file_name, data_dir="data", num_c
     
     return X, y
 
-def train_readout_mnistc_Retrain(F_init, C_init, W_out, X_data, y_data, 
+def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data, 
                                          Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, 
                                          epsf, epsr, alpha, beta, mu,
                                          Duration=30, 
@@ -52,8 +53,8 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, X_data, y_data,
     
     F = F_init.copy()
     C = C_init.copy()
-    
-    b_out = np.zeros(Nclasses)
+    W_out = W_out.copy()
+    b_out = b_out.copy()    
     
     V = np.zeros(Nneuron)
     rO = np.zeros(Nneuron)
@@ -68,22 +69,25 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, X_data, y_data,
     acc_buffer = []
     spike_times = []
     spike_neurons = []
+
+    # 追加: 膜電位分散の履歴用リスト
+    membrane_var_history = []
     
     for i in range(NumSamples):
         if i % 100 == 0:
             print(f'\r  Phase 1 Iter: {i}/{NumSamples} (Spikes: {total_spikes})', end='')
 
-        raw_img = X_data[i]
-        
-        if i >= 1000:
-            raw_img = np.rot90(raw_img.reshape(28, 28), k=1).flatten()
-            
+        raw_img = X_data[i]     
         img = raw_img * Gain
         target_vec = y_data[i].copy()
 
         img_correct_counts = 0
         time_offset = i * Duration * dt
         
+        # 追加: この画像の提示期間中の全ニューロンの膜電位を記録するバッファ
+        # shape: (Nneuron, Duration)
+        V_temporal_buffer = np.zeros((Nneuron, Duration))
+
         for t in range(Duration):
             noise = 0.02 * np.random.randn(Nneuron)
             recurrent_input = 0
@@ -93,6 +97,9 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, X_data, y_data,
             V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
             x = (1 - leak * dt) * x + dt * img 
             
+            # 追加: 現在の膜電位をバッファに保存
+            V_temporal_buffer[:, t] = V
+
             thresh_noise = 0.01 * np.random.randn(Nneuron)
             potentials = V - Thresh - thresh_noise
             k_curr = np.argmax(potentials)
@@ -114,7 +121,7 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, X_data, y_data,
             if O == 1:
                 rO[k] += 1.0
 
-            # --- Readout Learning (デコーダは常に適応を続ける設定) ---
+            # --- Readout Learning ---
             y_est_vec = np.dot(W_out, rO) + b_out
             pred_idx = np.argmax(y_est_vec)
             error_vec = target_vec - y_est_vec
@@ -124,10 +131,19 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, X_data, y_data,
             if pred_idx == np.argmax(target_vec):
                 img_correct_counts += 1
         
+        # 追加: 画像提示終了後、分散を計算
+        # axis=1 (時間方向) の分散を計算 -> (Nneuron,)
+        # その後、全ニューロンの平均をとる -> scalar
+        var_per_neuron = np.var(V_temporal_buffer, axis=1)
+        mean_var = np.mean(var_per_neuron)
+        membrane_var_history.append(mean_var)
+
         is_correct = 1 if (img_correct_counts / Duration) > 0.5 else 0
         acc_buffer.append(is_correct)
         if len(acc_buffer) > 200: acc_buffer.pop(0)
         acc_history.append(np.mean(acc_buffer))
 
     print(f"\nPhase 2 Completed. Final Accuracy: {acc_history[-1]:.4f}")
-    return acc_history, spike_times, spike_neurons, F, C, W_out
+    
+    # 戻り値の最後に membrane_var_history を追加
+    return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history
