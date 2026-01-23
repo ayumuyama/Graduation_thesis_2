@@ -57,8 +57,7 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data,
     b_out = b_out.copy()    
     
     V = np.zeros(Nneuron)
-    rO = np.zeros(Nneuron)
-    x = np.zeros(Nx)
+    
     Id = np.eye(Nneuron)
     O = 0
     k = 0
@@ -76,6 +75,9 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data,
     for i in range(NumSamples):
         if i % 100 == 0:
             print(f'\r  Phase 1 Iter: {i}/{NumSamples} (Spikes: {total_spikes})', end='')
+
+        x = np.zeros(Nx)
+        rO = np.zeros(Nneuron)
 
         raw_img = X_data[i]     
         img = raw_img * Gain

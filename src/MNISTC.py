@@ -12,7 +12,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # 設定
     # ---------------------------------------------------------
-    Nneuron = 800   
+    Nneuron = 200   
     Nx = 784
     Nclasses = 10        
     
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     
     Thresh = 0.5
     Duration = 30
-    lr_readout=0.0002
+    lr_readout = 0.0002
     
     # 保存先設定
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(identity-cannyedges mu=0.02)")
