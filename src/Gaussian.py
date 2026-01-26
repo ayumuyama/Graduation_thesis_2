@@ -12,22 +12,19 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # 設定
     # ---------------------------------------------------------
-    Nneuron = 100   
+    Nneuron = 20   
     Nx = 2
     Nclasses = 2        
     
     leak = 50       
     dt = 0.001      
-
-    epsr = 0.5
-    epsf = 0.05  
     
-    alpha = 0.18    
+    alpha = 0.20    
     beta = 1 / 0.9  
     mu = 0.02 / 0.9
     
     Thresh = 0.5
-    lr_readout = 0.0005
+    lr_readout = 0.002
     
     # 保存先設定
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(Gaussian_exp)")
@@ -42,14 +39,14 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X, y = appssian.generate_continuous_shift_dataset(n_train=100000, n_test=100000, nx=2, sigma=5, seed=30,
-                                      train_params={'mean': [1.0, 0.0], 'std': [2.0, 1.0]},
-                                      test_params={'mean': 0.0, 'std': 1.0})
+    X, y = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=30,
+                                      train_params={'mean': [0.0, 0.0], 'std': [1.0, 4.0]},
+                                      test_params={'mean': [0.0, 0.0], 'std': [4.0, 1.0]})
 
-    X_train = X[:100000]
-    y_train = y[:100000]
-    X_test = X[100000:]
-    y_test = y[100000:]
+    X_train = X[:400000]
+    y_train = y[:400000]
+    X_test = X[400000:]
+    y_test = y[400000:]
     # ---------------------------------------------------------
     # Set 1: Learning
     # ---------------------------------------------------------
@@ -58,8 +55,8 @@ if __name__ == "__main__":
 
     # 戻り値の最後に final_states_1 を受け取る
     acc_hist_1, spk_t_1, spk_i_1, F_set1, C_set1, W_out_set1, b_out_set1, mem_var_1, final_states_1 = appssian.test_train_continuous(
-        F_initial, C_initial, W_out_initial, b_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, epsf, epsr, alpha, beta, mu,
-        retrain=True, Gain=8000, lr_readout=lr_readout, init_states=None # 最初は指定なし
+        F_initial, C_initial, W_out_initial, b_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, alpha, beta, mu,
+        retrain=True, Gain=200, lr_readout=lr_readout, epsr=0.0001, epsf=0.00001, init_states=None # 最初は指定なし
     )
     print(len(acc_hist_1))
     
@@ -70,8 +67,8 @@ if __name__ == "__main__":
 
     # init_states に Set 1 の終わりの状態を渡す
     acc_hist_2, spk_t_2, spk_i_2, *_, mem_var_2, final_states_2 = appssian.test_train_continuous(
-        F_set1, C_set1, W_out_set1, b_out_set1, X_test, y_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, epsf, epsr, alpha, beta, mu,
-        retrain=True, Gain=8000, lr_readout=lr_readout, init_states=final_states_1 # ★ここで引き継ぎ！
+        F_set1, C_set1, W_out_set1, b_out_set1, X_test, y_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, alpha, beta, mu,
+        retrain=True, Gain=200, lr_readout=lr_readout, epsr=0.001, epsf=0.0001, init_states=final_states_1 # ★ここで引き継ぎ！
     )
     print(len(acc_hist_2))
 
@@ -110,7 +107,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     
     # --- 移動平均の計算 ---
-    window_size = 2000  # 平均を取る範囲 (この数値を大きくするとより滑らかになります)
+    window_size = 1000  # 平均を取る範囲 (この数値を大きくするとより滑らかになります)
     if len(full_acc) >= window_size:
         # 移動平均フィルタの作成
         b = np.ones(window_size) / window_size

@@ -131,8 +131,8 @@ def generate_continuous_shift_dataset(n_train=5000, n_test=5000, nx=2, sigma=30,
 
 def test_train_continuous(F_init, C_init, W_out, b_out, X_data, y_data, 
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          epsf, epsr, alpha, beta, mu, retrain, Gain=1,
-                          lr_readout=0.008,
+                          alpha, beta, mu, retrain, Gain=1,
+                          lr_readout=0.008, epsr=0.005, epsf=0.0005,
                           init_states=None):
     
     # 時間ステップ総数 (Continuous time steps)
