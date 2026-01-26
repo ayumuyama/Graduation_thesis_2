@@ -236,14 +236,15 @@ def test_train_continuous(F_init, C_init, W_out, b_out, X_data, y_data,
         # 膜電位の分散 (ここでは集団全体の分散を記録)
         membrane_var_history.append(np.var(V))
 
+        if t % 100000 == 0:
+            print(V)
+
     print(f"\nPhase Completed. Final Accuracy (Moving Avg): {acc_history[-1]:.4f}")
     
     # 最終状態を保存
     final_states = {'V': V, 'rO': rO, 'x': x}
 
     return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, final_states
-
-import numpy as np
 
 def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data, 
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
