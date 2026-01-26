@@ -19,15 +19,14 @@ if __name__ == "__main__":
     leak = 50       
     dt = 0.001      
     
-    alpha = 0.20    
+    alpha = 0.18    
     beta = 1 / 0.9  
     mu = 0.02 / 0.9
     
     Thresh = 0.5
-    lr_readout = 0.002
     
     # 保存先設定
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(Gaussian_exp)")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(nonsuggestGaussian_exp)")
     base_save_dir = Path("results")
     current_save_dir = base_save_dir / timestamp
     current_save_dir.mkdir(parents=True, exist_ok=True)
@@ -39,26 +38,24 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X, y = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=30,
+    X = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=30,
                                       train_params={'mean': [0.0, 0.0], 'std': [1.0, 4.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [4.0, 1.0]})
+                                      test_params={'mean': [1.0, 0.0], 'std': [4.0, 1.0]})
 
     X_train = X[:400000]
-    y_train = y[:400000]
     X_test = X[400000:]
-    y_test = y[400000:]
     # ---------------------------------------------------------
     # Set 1: Learning
     # ---------------------------------------------------------
     print("--- Phase 1: Learning on Set 1 ---")
-    F_initial, C_initial, W_out_initial, b_out_initial = appssian.init_weights(Nx, Nneuron, Nclasses)
+    F_initial, C_initial, *_ = appssian.init_weights(Nx, Nneuron, Nclasses)
 
     # 戻り値の最後に final_states_1 を受け取る
-    acc_hist_1, spk_t_1, spk_i_1, F_set1, C_set1, W_out_set1, b_out_set1, mem_var_1, final_states_1 = appssian.test_train_continuous(
-        F_initial, C_initial, W_out_initial, b_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, alpha, beta, mu,
-        retrain=True, Gain=200, lr_readout=lr_readout, epsr=0.8, epsf=0.08, init_states=None # 最初は指定なし
-    )
-    print(len(acc_hist_1))
+    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, final_states_1 = appssian.test_train_continuous_nonclass(
+                          F_initial, C_initial, X_train,
+                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                          alpha, beta, mu, retrain=True, Gain=200,
+                          epsr=0.001, epsf=0.0001, init_states=None)
     
     # ---------------------------------------------------------
     # Set 2: Learning
@@ -66,18 +63,16 @@ if __name__ == "__main__":
     print("--- Phase 2: Learning on Set 2 ---")
 
     # init_states に Set 1 の終わりの状態を渡す
-    acc_hist_2, spk_t_2, spk_i_2, *_, mem_var_2, final_states_2 = appssian.test_train_continuous(
-        F_set1, C_set1, W_out_set1, b_out_set1, X_test, y_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, alpha, beta, mu,
-        retrain=True, Gain=200, lr_readout=lr_readout, epsr=0.001, epsf=0.08, init_states=final_states_1 # ★ここで引き継ぎ！
-    )
-    print(len(acc_hist_2))
-
+    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, final_states_2 = appssian.test_train_continuous_nonclass(
+                          F_initial, C_initial, X_train,
+                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                          alpha, beta, mu, retrain=True, Gain=200,
+                          epsr=0.001, epsf=0.0001, init_states=None)
+    
     # ---------------------------------------------------------
     # Data Combination
     # ---------------------------------------------------------
     print("Combining data for plots...")
-   
-    full_acc = acc_hist_1 + acc_hist_2
     
     # Membrane Variance の結合
     full_mem_var = mem_var_1 + mem_var_2
@@ -98,48 +93,6 @@ if __name__ == "__main__":
     # 時刻をシフトして結合
     full_spk_t = np.concatenate([t1, t2 + time_offset])
     full_spk_i = np.concatenate([i1, i2])
-
-    # ---------------------------------------------------------
-    # Plot 1: Accuracy History (Combined) with Moving Average
-    # ---------------------------------------------------------
-    print("Generating Plots...")
-
-    plt.figure(figsize=(10, 6))
-    
-    # --- 移動平均の計算 ---
-    window_size = 1000  # 平均を取る範囲 (この数値を大きくするとより滑らかになります)
-    if len(full_acc) >= window_size:
-        # 移動平均フィルタの作成
-        b = np.ones(window_size) / window_size
-        # mode='valid' で計算 (端のデータ不足部分はカット)
-        full_acc_smooth = np.convolve(full_acc, b, mode='valid')
-        
-        # --- プロット ---
-        # 1. 生データ (薄く表示)
-        plt.plot(full_acc, label='Raw Accuracy', color='lightblue', alpha=0.4)
-        
-        # 2. 平滑化データ (濃く表示)
-        # 畳み込みでデータ長が短くなるため、X軸をずらしてプロットします
-        plt.plot(np.arange(window_size - 1, len(full_acc)), full_acc_smooth, 
-                 label=f'Moving Average (window={window_size})', color='blue', linewidth=2)
-    else:
-        # データが少なすぎる場合はそのままプロット
-        plt.plot(full_acc, label='Accuracy', color='blue')
-
-    # Set 1 と Set 2 の境界線を描画
-    plt.axvline(x=len(acc_hist_1), color='red', linestyle='--', label='End of Set 1')
-    
-    plt.xlabel('Input Samples')
-    plt.ylabel('Accuracy')
-    plt.title('Classification Accuracy History')
-    plt.ylim(0, 1.05)
-    plt.grid(True)
-    plt.legend()
-    
-    acc_plot_path = current_save_dir / "Final_Accuracy_Smoothed.png"
-    plt.savefig(acc_plot_path)
-    plt.close()
-    print(f"Accuracy plot saved to: {acc_plot_path}")
 
     # # ---------------------------------------------------------
     # # Plot 2: Raster Plot (Combined) - Modified
@@ -184,7 +137,7 @@ if __name__ == "__main__":
     else:
         plt.plot(full_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(acc_hist_1), color='red', linestyle='--', label='End of Set 1')
+    plt.axvline(x=len(X_train), color='red', linestyle='--', label='End of Set 1')
     
     plt.xlabel('Input Samples')
     plt.ylabel('Voltage Variance per Neuron')
@@ -201,32 +154,34 @@ if __name__ == "__main__":
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
 
     # プロット
+# Trainデータのプロット
 plt.figure(figsize=(8, 8))
-plt.scatter(X_train[y_train==0, 0], X_train[y_train==0, 1], c='blue', alpha=0.5, label='Class 0')
-plt.scatter(X_train[y_train==1, 0], X_train[y_train==1, 1], c='red', alpha=0.5, label='Class 1')
-# 軌跡を描画して「時系列的なつながり」を確認
+# 全データ（X_train）を青い点(c='blue')でプロット
+plt.scatter(X_train[:, 0], X_train[:, 1], c='blue', alpha=0.5, label='Data Points')
+# 軌跡を描画
 plt.plot(X_train[:, 0], X_train[:, 1], c='gray', alpha=0.2, linewidth=1)
 
-plt.title("Smoothed Random Walk with Non-linear Boundary")
+plt.title("Smoothed Random Walk (Train)")
 plt.xlabel("Input Dimension 1")
 plt.ylabel("Input Dimension 2")
 plt.legend()
 plt.grid(True)
-plt.axis('equal') # アスペクト比を揃える
+plt.axis('equal')
 plt.savefig("smoothed_dataset_train.png")
 plt.close()
 
+# Testデータのプロット
 plt.figure(figsize=(8, 8))
-plt.scatter(X_test[y_test==0, 0], X_test[y_test==0, 1], c='blue', alpha=0.5, label='Class 0')
-plt.scatter(X_test[y_test==1, 0], X_test[y_test==1, 1], c='red', alpha=0.5, label='Class 1')
-# 軌跡を描画して「時系列的なつながり」を確認
+# 全データ（X_test）を青い点(c='blue')でプロット
+plt.scatter(X_test[:, 0], X_test[:, 1], c='blue', alpha=0.5, label='Data Points')
+# 軌跡を描画
 plt.plot(X_test[:, 0], X_test[:, 1], c='gray', alpha=0.2, linewidth=1)
 
-plt.title("Smoothed Random Walk with Non-linear Boundary")
+plt.title("Smoothed Random Walk (Test)")
 plt.xlabel("Input Dimension 1")
 plt.ylabel("Input Dimension 2")
 plt.legend()
 plt.grid(True)
-plt.axis('equal') # アスペクト比を揃える
+plt.axis('equal')
 plt.savefig("smoothed_dataset_test.png")
 plt.close()

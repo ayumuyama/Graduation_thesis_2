@@ -44,6 +44,35 @@ def generate_smooth_dataset(n_time=1000, nx=2, sigma=30, seed=42):
     
     return X, y
 
+def generate_smooth_dataset(n_time=1000, nx=2, sigma=30, seed=42):
+    """
+    MATLABコードのロジックに基づいて平滑化された時系列データセットを生成する関数
+    """
+    np.random.seed(seed)
+    
+    # 1. ガウス窓(カーネル)の作成
+    # MATLAB: w = (1/(sigma*sqrt(2*pi))) * exp(...)
+    # 1000ステップ分の窓を作成
+    t_kernel = np.arange(1, 1001)
+    # 中心を500にずらして計算
+    w = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((t_kernel - 500)**2) / (2 * sigma**2))
+    w = w / np.sum(w) # 合計が1になるように正規化
+
+    # 2. ホワイトノイズの生成
+    # Nx次元 x Ntime時間
+    white_noise = np.random.randn(nx, n_time)
+
+    # 3. ガウス窓による平滑化 (畳み込み)
+    smooth_input = np.zeros_like(white_noise)
+    for d in range(nx):
+        # mode='same' で出力サイズを入力と同じ長さに保つ
+        smooth_input[d, :] = convolve(white_noise[d, :], w, mode='same')
+        
+    # 転置して (サンプル数, 特徴量数) の形にする => (1000, 2)
+    X = smooth_input.T
+    
+    return X
+
 def generate_smooth_Gaussiandataset(n_time=1000, nx=2, sigma=30, seed=42, 
                                     input_mean=0.0, input_std=1.0):
     """
@@ -117,17 +146,7 @@ def generate_continuous_shift_dataset(n_train=5000, n_test=5000, nx=2, sigma=30,
         
     X = smooth_input.T # shape: (TotalTime, nx)
     
-    # 4. ラベル付け
-    # 原点(0,0)を基準とするため、データの重心計算は不要です。
-    # 単純に各座標の積をとります。
-    
-    # x * y > 0  --> 第1象限(+,+) または 第3象限(-,-) --> Class 1
-    # x * y <= 0 --> 第2象限(-,+) または 第4象限(+,-) --> Class 0
-    product = X[:, 0] * X[:, 1]
-
-    y = np.where(product > 0, 1, 0)
-
-    return X, y
+    return X
 
 def test_train_continuous(F_init, C_init, W_out, b_out, X_data, y_data, 
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
@@ -236,9 +255,6 @@ def test_train_continuous(F_init, C_init, W_out, b_out, X_data, y_data,
         # 膜電位の分散 (ここでは集団全体の分散を記録)
         membrane_var_history.append(np.var(V))
 
-        if t % 100000 == 0:
-            print(V)
-
     print(f"\nPhase Completed. Final Accuracy (Moving Avg): {acc_history[-1]:.4f}")
     
     # 最終状態を保存
@@ -246,16 +262,15 @@ def test_train_continuous(F_init, C_init, W_out, b_out, X_data, y_data,
 
     return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, final_states
 
-def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data, 
+def test_train_continuous_suggest(F_init, C_init, W_out, b_out, X_data, y_data, 
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          epsf, epsr, alpha, beta, mu, retrain, Gain=1,
-                          lr_readout=0.008,
-                          init_states=None,
-                          sigma_wta=50.0): # 追加: Soft WTAの鋭さを調整するパラメータ
+                          alpha, beta, mu, retrain, Gain=1,
+                          lr_readout=0.008, eps=0.005,  # 変更: epsr, epsfを削除し、epsを追加
+                          init_states=None):
     
     # 時間ステップ総数 (Continuous time steps)
     TotalTime = X_data.shape[0]
-    print(f"Phase : Continuous Training/Testing (Total Steps: {TotalTime}) [Soft WTA mode]")
+    print(f"Phase : Continuous Training/Testing (Total Steps: {TotalTime})")
     
     F = F_init.copy()
     C = C_init.copy()
@@ -281,7 +296,7 @@ def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data,
     acc_buffer = []  # 移動平均用
     spike_times = []
     spike_neurons = []
-    membrane_var_history = [] 
+    membrane_var_history = [] # 各ステップの膜電位分散（空間的）を記録
     
     # --- 単一のメインループ (Time Step) ---
     for t in range(TotalTime):
@@ -289,15 +304,15 @@ def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data,
             print(f'\r  Step: {t}/{TotalTime} (Spikes: {total_spikes})', end='')
 
         # 1. 現在の時刻の入力を取得
-        raw_input = X_data[t]      # shape: (Nx,)
-        img = raw_input * Gain     # ゲインをかける
+        raw_input = X_data[t]       # shape: (Nx,)
+        img = raw_input * Gain      # ゲインをかける
         
         # 2. 現在の時刻のターゲットを取得 & ワンホット化
         label_scalar = int(y_data[t])
         target_vec = np.zeros(Nclasses)
         target_vec[label_scalar] = 1.0
         
-        # --- ネットワークダイナミクス ---
+        # --- ネットワークダイナミクス (更新則は変更なし) ---
         noise = 0.01 * np.random.randn(Nneuron)
         
         recurrent_input = 0
@@ -305,42 +320,41 @@ def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data,
             recurrent_input = C[:, k] # 前のステップでスパイクしたニューロンkからの入力
 
         # 膜電位 V の更新
+        # 入力 img は毎ステップ変化する連続値になりました
         V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
         
         # フィルタ済み入力 x の更新
         x = (1 - leak * dt) * x + dt * img 
         
-        # --- スパイク生成判定 (Soft WTAへの変更箇所) ---
+        # --- スパイク生成判定 ---
         thresh_noise = 0.01 * np.random.randn(Nneuron)
         potentials = V - Thresh - thresh_noise
-        
-        # === Soft WTA Logic Start ===
-        # 膜電位(potentials)が高いほど選ばれる確率が高くなる確率分布を作成
-        # sigma_wta: 逆温度 (大きいとargmaxに近く、小さいと平坦になる)
-        
-        # オーバーフロー対策のため最大値を引いてからexpを計算
-        scaled_potentials = sigma_wta * potentials
-        max_pot = np.max(scaled_potentials)
-        exp_p = np.exp(scaled_potentials - max_pot)
-        probs = exp_p / np.sum(exp_p) # 確率分布の合計を1にする
-        
-        # 確率に基づいて勝者ニューロンk_currをサンプリング
-        k_curr = np.random.choice(Nneuron, p=probs)
-        # === Soft WTA Logic End ===
+        k_curr = np.argmax(potentials) # 最も閾値を超えているニューロンを探す
 
-        # 選ばれたニューロンが実際に閾値を超えているか判定
-        # (Softmaxは常に誰かを選ぶため、閾値チェックで発火の有無を決める)
         if potentials[k_curr] >= 0:
             O = 1
             k = k_curr
-            spike_times.append(t * dt)
+            spike_times.append(t * dt) # 時刻を記録
             spike_neurons.append(k)
             total_spikes += 1
             
             # STDP的な重み更新 (retrain=Trueの場合のみ)
             if retrain:
-                F[:, k] += epsf * (alpha * x - F[:, k])
-                C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+                # --- 修正箇所: ここから ---
+                # 1. 膜電位の分散の計算
+                current_var = np.var(V)
+                
+                # 2. 学習率の都度計算
+                # epsf = eps * np.var(V)
+                # epsr = 10 * epsf
+                current_epsf = eps * current_var
+                current_epsr = 10 * current_epsf
+                
+                # 3. 重み更新 (計算した学習率を使用)
+                F[:, k] += current_epsf * (alpha * x - F[:, k])
+                C[:, k] -= current_epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+                # --- 修正箇所: ここまで ---
+                
         else:
             O = 0
 
@@ -362,9 +376,12 @@ def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data,
         is_correct = 1 if pred_idx == label_scalar else 0
         
         acc_buffer.append(is_correct)
-        if len(acc_buffer) > 200: acc_buffer.pop(0)
+        if len(acc_buffer) > 200: acc_buffer.pop(0) # 直近200ステップの移動平均精度
         acc_history.append(np.mean(acc_buffer))
 
+        # 膜電位の分散 (記録用)
+        # 既に計算済みなら再利用することも可能ですが、
+        # スパイクしなかったステップもあるため一貫性のために再度呼ぶか、そのままでもOKです
         membrane_var_history.append(np.var(V))
 
     print(f"\nPhase Completed. Final Accuracy (Moving Avg): {acc_history[-1]:.4f}")
@@ -373,3 +390,193 @@ def test_train_continuous_soft(F_init, C_init, W_out, b_out, X_data, y_data,
     final_states = {'V': V, 'rO': rO, 'x': x}
 
     return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, final_states
+
+def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
+                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                          alpha, beta, mu, retrain, Gain=1,
+                          eps=0.005, init_states=None):
+    
+    # 時間ステップ総数 (Continuous time steps)
+    TotalTime = X_data.shape[0]
+    print(f"Phase : Continuous Training/Testing (Total Steps: {TotalTime})")
+    
+    F = F_init.copy()
+    C = C_init.copy()
+    
+    # --- 初期状態のセットアップ ---
+    if init_states is None:
+        V = np.zeros(Nneuron)
+        rO = np.zeros(Nneuron)
+        x = np.zeros(Nx)
+    else:
+        V = init_states['V'].copy()
+        rO = init_states['rO'].copy()
+        x = init_states['x'].copy()
+
+    Id = np.eye(Nneuron)
+    O = 0
+    k = 0
+
+    total_spikes = 0
+    spike_times = []
+    spike_neurons = []
+    membrane_var_history = [] # 各ステップの膜電位分散（空間的）を記録
+    
+    # --- 単一のメインループ (Time Step) ---
+    for t in range(TotalTime):
+        if t % 1000 == 0:
+            print(f'\r  Step: {t}/{TotalTime} (Spikes: {total_spikes})', end='')
+
+        # 1. 現在の時刻の入力を取得
+        raw_input = X_data[t]       # shape: (Nx,)
+        img = raw_input * Gain      # ゲインをかける
+        
+        # --- ネットワークダイナミクス (更新則は変更なし) ---
+        noise = 0.01 * np.random.randn(Nneuron)
+        
+        recurrent_input = 0
+        if O == 1:
+            recurrent_input = C[:, k] # 前のステップでスパイクしたニューロンkからの入力
+
+        # 膜電位 V の更新
+        # 入力 img は毎ステップ変化する連続値になりました
+        V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
+        
+        # フィルタ済み入力 x の更新
+        x = (1 - leak * dt) * x + dt * img 
+        
+        # --- スパイク生成判定 ---
+        thresh_noise = 0.01 * np.random.randn(Nneuron)
+        potentials = V - Thresh - thresh_noise
+        k_curr = np.argmax(potentials) # 最も閾値を超えているニューロンを探す
+
+        if potentials[k_curr] >= 0:
+            O = 1
+            k = k_curr
+            spike_times.append(t * dt) # 時刻を記録
+            spike_neurons.append(k)
+            total_spikes += 1
+            
+            # STDP的な重み更新 (retrain=Trueの場合のみ)
+            if retrain:
+                # --- 修正箇所: ここから ---
+                # 1. 膜電位の分散の計算
+                current_var = np.var(V)
+                
+                # 2. 学習率の都度計算
+                # epsf = eps * np.var(V)
+                # epsr = 10 * epsf
+                current_epsf = eps * current_var
+                current_epsr = 10 * current_epsf
+                
+                # 3. 重み更新 (計算した学習率を使用)
+                F[:, k] += current_epsf * (alpha * x - F[:, k])
+                C[:, k] -= current_epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+                # --- 修正箇所: ここまで ---
+                
+        else:
+            O = 0
+
+        # フィルタ済みスパイク列 rO の更新
+        rO = (1 - leak * dt) * rO
+        if O == 1:
+            rO[k] += 1.0
+    
+        # 膜電位の分散 (記録用)
+        # 既に計算済みなら再利用することも可能ですが、
+        # スパイクしなかったステップもあるため一貫性のために再度呼ぶか、そのままでもOKです
+        membrane_var_history.append(np.var(V))
+
+    
+    # 最終状態を保存
+    final_states = {'V': V, 'rO': rO, 'x': x}
+
+    return spike_times, spike_neurons, F, C, membrane_var_history, final_states
+
+def test_train_continuous_nonclass(F_init, C_init, X_data,
+                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                          alpha, beta, mu, retrain, Gain=1,
+                          epsr=0.05, epsf=0.005, init_states=None):
+    
+    # 時間ステップ総数 (Continuous time steps)
+    TotalTime = X_data.shape[0]
+    print(f"Phase : Continuous Training/Testing (Total Steps: {TotalTime})")
+    
+    F = F_init.copy()
+    C = C_init.copy()
+    
+    # --- 初期状態のセットアップ ---
+    if init_states is None:
+        V = np.zeros(Nneuron)
+        rO = np.zeros(Nneuron)
+        x = np.zeros(Nx)
+    else:
+        V = init_states['V'].copy()
+        rO = init_states['rO'].copy()
+        x = init_states['x'].copy()
+
+    Id = np.eye(Nneuron)
+    O = 0
+    k = 0
+
+    total_spikes = 0
+    acc_history = []
+    acc_buffer = []  # 移動平均用
+    spike_times = []
+    spike_neurons = []
+    membrane_var_history = [] # 各ステップの膜電位分散（空間的）を記録
+    
+    # --- 単一のメインループ (Time Step) ---
+    for t in range(TotalTime):
+        if t % 1000 == 0:
+            print(f'\r  Step: {t}/{TotalTime} (Spikes: {total_spikes})', end='')
+
+        # 1. 現在の時刻の入力を取得
+        raw_input = X_data[t]      # shape: (Nx,)
+        img = raw_input * Gain     # ゲインをかける
+        
+        # --- ネットワークダイナミクス (更新則は変更なし) ---
+        noise = 0.01 * np.random.randn(Nneuron)
+        
+        recurrent_input = 0
+        if O == 1:
+            recurrent_input = C[:, k] # 前のステップでスパイクしたニューロンkからの入力
+
+        # 膜電位 V の更新
+        # 入力 img は毎ステップ変化する連続値になりました
+        V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
+        
+        # フィルタ済み入力 x の更新
+        x = (1 - leak * dt) * x + dt * img 
+        
+        # --- スパイク生成判定 ---
+        thresh_noise = 0.01 * np.random.randn(Nneuron)
+        potentials = V - Thresh - thresh_noise
+        k_curr = np.argmax(potentials) # 最も閾値を超えているニューロンを探す
+
+        if potentials[k_curr] >= 0:
+            O = 1
+            k = k_curr
+            spike_times.append(t * dt) # 時刻を記録
+            spike_neurons.append(k)
+            total_spikes += 1
+            
+            # STDP的な重み更新 (retrain=Trueの場合のみ)
+            if retrain:
+                F[:, k] += epsf * (alpha * x - F[:, k])
+                C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+        else:
+            O = 0
+
+        # フィルタ済みスパイク列 rO の更新
+        rO = (1 - leak * dt) * rO
+        if O == 1:
+            rO[k] += 1.0
+
+        # 膜電位の分散 (ここでは集団全体の分散を記録)
+        membrane_var_history.append(np.var(V))
+    
+    # 最終状態を保存
+    final_states = {'V': V, 'rO': rO, 'x': x}
+
+    return spike_times, spike_neurons, F, C, membrane_var_history, final_states
