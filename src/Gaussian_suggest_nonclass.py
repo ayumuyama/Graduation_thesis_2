@@ -38,9 +38,9 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=30,
+    X = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=23,
                                       train_params={'mean': [0.0, 0.0], 'std': [1.0, 4.0]},
-                                      test_params={'mean': [1.0, 0.0], 'std': [4.0, 1.0]})
+                                      test_params={'mean': [0.0, 0.0], 'std': [4.0, 1.0]})
 
     X_train = X[:400000]
     X_test = X[400000:]
@@ -51,10 +51,16 @@ if __name__ == "__main__":
     F_initial, C_initial, *_ = appssian.init_weights(Nx, Nneuron, Nclasses)
 
     # 戻り値の最後に final_states_1 を受け取る
-    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, final_states_1 = appssian.test_train_continuous_suggest_nonclass(
-        F_initial, C_initial, X_train,
-        Nneuron, Nx, Nclasses, dt, leak, Thresh,
-        alpha, beta, mu, retrain=True, Gain=200, eps=0.0001, init_states=None)
+    # spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, weight_error_1, final_states_1 = appssian.test_train_continuous_suggest_nonclass(
+    #     F_initial, C_initial, X_train,
+    #     Nneuron, Nx, Nclasses, dt, leak, Thresh,
+    #     alpha, beta, mu, retrain=True, Gain=200, eps=0.0001, init_states=None)
+
+    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, weight_error_1, final_states_1 = appssian.test_train_continuous_nonclass(
+                          F_initial, C_initial, X_train,
+                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                          alpha, beta, mu, retrain=True, Gain=200,
+                          epsr=0.001, epsf=0.0001, init_states=None)
     
     # ---------------------------------------------------------
     # Set 2: Learning
@@ -62,9 +68,10 @@ if __name__ == "__main__":
     print("--- Phase 2: Learning on Set 2 ---")
 
     # init_states に Set 1 の終わりの状態を渡す
-    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, final_states_2 = appssian.test_train_continuous_suggest_nonclass(
-        F_set1, C_set1, X_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, alpha, beta, mu,
-        retrain=True, Gain=200, eps=0.0001, init_states=final_states_1 # ★ここで引き継ぎ！
+    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, weight_error_2, final_states_2 = appssian.test_train_continuous_suggest_nonclass(
+        F_set1, C_set1, X_test,
+        Nneuron, Nx, Nclasses, dt, leak, Thresh,
+        alpha, beta, mu, retrain=True, Gain=200, eps=0.0001, init_states=final_states_1 # ★ここで引き継ぎ！
     )
 
     # ---------------------------------------------------------
@@ -91,9 +98,13 @@ if __name__ == "__main__":
     # 時刻をシフトして結合
     full_spk_t = np.concatenate([t1, t2 + time_offset])
     full_spk_i = np.concatenate([i1, i2])
+    full_weight_error = weight_error_1 + weight_error_2
+
+    record_interval_steps = 100
+    time_axis_error = np.arange(len(full_weight_error)) * dt * record_interval_steps
 
     # # ---------------------------------------------------------
-    # # Plot 2: Raster Plot (Combined) - Modified
+    # # Plot 1: Raster Plot (Combined) - Modified
     # # ---------------------------------------------------------
     plt.figure(figsize=(12, 6))
     
@@ -117,7 +128,7 @@ if __name__ == "__main__":
     print(f"Raster plot saved to: {raster_plot_path}")
 
     # ---------------------------------------------------------
-    # Plot 3: Membrane Potential Variance (新規追加)
+    # Plot 2: Membrane Potential Variance (新規追加)
     # ---------------------------------------------------------
     plt.figure(figsize=(10, 6))
     
@@ -150,6 +161,28 @@ if __name__ == "__main__":
     plt.savefig(mem_plot_path)
     plt.close()
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
+
+    # ---------------------------------------------------------
+    # ★新規追加: Plot 3: Distance to Optimal Weights
+    # ---------------------------------------------------------
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_axis_error, full_weight_error, color='purple', label='Distance to Optimal Weights')
+    
+    # Set 1 と Set 2 の境界線
+    end_time_set1 = len(weight_error_1) * dt * record_interval_steps
+    plt.axvline(x=end_time_set1, color='red', linestyle='--', label='End of Set 1')
+
+    plt.xlabel('Time (s)')
+    plt.ylabel('Normalized Distance')
+    plt.title('Convergence to Optimal Recurrent Weights (E-I Balance)')
+    plt.yscale('log') # 対数グラフ推奨
+    plt.grid(True, which="both", ls="-", alpha=0.5)
+    plt.legend()
+    
+    weight_plot_path = current_save_dir / "Final_Weight_Convergence.png"
+    plt.savefig(weight_plot_path)
+    plt.close()
+    print(f"Weight Convergence plot saved to: {weight_plot_path}")
 
     # プロット
 # Trainデータのプロット

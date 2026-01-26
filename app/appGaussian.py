@@ -421,6 +421,7 @@ def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
     spike_times = []
     spike_neurons = []
     membrane_var_history = [] # 各ステップの膜電位分散（空間的）を記録
+    weight_error_history = [] # ★新規追加: 重み誤差の履歴用リスト
     
     # --- 単一のメインループ (Time Step) ---
     for t in range(TotalTime):
@@ -477,6 +478,33 @@ def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
         else:
             O = 0
 
+        # ---------------------------------------------------------
+        # ★新規追加: 最適重みとの距離の計算 (MATLAB Learning.m 準拠)
+        # 毎ステップ計算すると重いため、100ステップごとに計算などを推奨
+        # ---------------------------------------------------------
+        if t % 100 == 0:
+            # 理論的な最適再帰結合: C_opt = -F^T * F
+            C_opt = -F.T @ F
+            
+            # スケーリング係数の計算 (MATLAB: optscale = trace(CurrC'*Copt)/sum(sum(Copt.^2)))
+            denom_opt = np.sum(C_opt**2)
+            if denom_opt > 1e-12:
+                optscale = np.trace(C.T @ C_opt) / denom_opt
+            else:
+                optscale = 1.0
+                
+            # 正規化項 (MATLAB: Cnorm = sum(sum((CurrC).^2)))
+            C_norm = np.sum(C**2)
+            
+            # 誤差の計算 (MATLAB: ErrorC = sum(sum((CurrC - optscale*Copt).^2))/Cnorm)
+            if C_norm > 1e-12:
+                w_err = np.sum((C - optscale * C_opt)**2) / C_norm
+            else:
+                w_err = 0.0
+                
+            weight_error_history.append(w_err)
+        # ---------------------------------------------------------
+
         # フィルタ済みスパイク列 rO の更新
         rO = (1 - leak * dt) * rO
         if O == 1:
@@ -491,7 +519,7 @@ def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
     # 最終状態を保存
     final_states = {'V': V, 'rO': rO, 'x': x}
 
-    return spike_times, spike_neurons, F, C, membrane_var_history, final_states
+    return spike_times, spike_neurons, F, C, membrane_var_history, weight_error_history, final_states
 
 def test_train_continuous_nonclass(F_init, C_init, X_data,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
@@ -520,11 +548,10 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
     k = 0
 
     total_spikes = 0
-    acc_history = []
-    acc_buffer = []  # 移動平均用
     spike_times = []
     spike_neurons = []
     membrane_var_history = [] # 各ステップの膜電位分散（空間的）を記録
+    weight_error_history = [] # ★新規追加: 重み誤差の履歴用リスト
     
     # --- 単一のメインループ (Time Step) ---
     for t in range(TotalTime):
@@ -568,6 +595,33 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
         else:
             O = 0
 
+        # ---------------------------------------------------------
+        # ★新規追加: 最適重みとの距離の計算 (MATLAB Learning.m 準拠)
+        # 毎ステップ計算すると重いため、100ステップごとに計算などを推奨
+        # ---------------------------------------------------------
+        if t % 100 == 0:
+            # 理論的な最適再帰結合: C_opt = -F^T * F
+            C_opt = -F.T @ F
+            
+            # スケーリング係数の計算 (MATLAB: optscale = trace(CurrC'*Copt)/sum(sum(Copt.^2)))
+            denom_opt = np.sum(C_opt**2)
+            if denom_opt > 1e-12:
+                optscale = np.trace(C.T @ C_opt) / denom_opt
+            else:
+                optscale = 1.0
+                
+            # 正規化項 (MATLAB: Cnorm = sum(sum((CurrC).^2)))
+            C_norm = np.sum(C**2)
+            
+            # 誤差の計算 (MATLAB: ErrorC = sum(sum((CurrC - optscale*Copt).^2))/Cnorm)
+            if C_norm > 1e-12:
+                w_err = np.sum((C - optscale * C_opt)**2) / C_norm
+            else:
+                w_err = 0.0
+                
+            weight_error_history.append(w_err)
+        # ---------------------------------------------------------
+
         # フィルタ済みスパイク列 rO の更新
         rO = (1 - leak * dt) * rO
         if O == 1:
@@ -579,4 +633,4 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
     # 最終状態を保存
     final_states = {'V': V, 'rO': rO, 'x': x}
 
-    return spike_times, spike_neurons, F, C, membrane_var_history, final_states
+    return spike_times, spike_neurons, F, C, membrane_var_history, weight_error_history, final_states
