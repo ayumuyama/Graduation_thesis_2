@@ -51,7 +51,7 @@ if __name__ == "__main__":
     F_initial, C_initial, *_ = appssian.init_weights(Nx, Nneuron, Nclasses)
 
     # 戻り値の最後に final_states_1 を受け取る
-    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, weight_error_1, final_states_1 = appssian.test_train_continuous_nonclass(
+    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = appssian.test_train_continuous_nonclass(
                           F_initial, C_initial, X_train,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
                           alpha, beta, mu, retrain=True, Gain=200,
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     print("--- Phase 2: Learning on Set 2 ---")
 
     # init_states に Set 1 の終わりの状態を渡す
-    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, weight_error_2, final_states_2 = appssian.test_train_continuous_nonclass(
+    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, w_err_2, d_err_2, final_states_2 = appssian.test_train_continuous_nonclass(
                           F_initial, C_initial, X_test,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
                           alpha, beta, mu, retrain=True, Gain=200,
@@ -93,10 +93,13 @@ if __name__ == "__main__":
     # 時刻をシフトして結合
     full_spk_t = np.concatenate([t1, t2 + time_offset])
     full_spk_i = np.concatenate([i1, i2])
-    full_weight_error = weight_error_1 + weight_error_2
+    full_weight_error = w_err_1 + w_err_2
+    full_dec_err = d_err_1 + d_err_2
 
     record_interval_steps = 100
     time_axis_error = np.arange(len(full_weight_error)) * dt * record_interval_steps
+    eval_interval = 10000
+    time_axis_dec = np.arange(len(full_dec_err)) * dt * eval_interval
 
     # # ---------------------------------------------------------
     # # Plot 1: Raster Plot (Combined) - Modified
@@ -164,7 +167,7 @@ if __name__ == "__main__":
     plt.plot(time_axis_error, full_weight_error, color='purple', label='Distance to Optimal Weights')
     
     # Set 1 と Set 2 の境界線
-    end_time_set1 = len(weight_error_1) * dt * record_interval_steps
+    end_time_set1 = len(w_err_1) * dt * record_interval_steps
     plt.axvline(x=end_time_set1, color='red', linestyle='--', label='End of Set 1')
 
     plt.xlabel('Time (s)')
@@ -178,6 +181,23 @@ if __name__ == "__main__":
     plt.savefig(weight_plot_path)
     plt.close()
     print(f"Weight Convergence plot saved to: {weight_plot_path}")
+
+    # 符号化誤差
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_axis_dec, full_dec_err, 'o-', color='orange', label='Decoding Error', markersize=4)
+    
+    # 境界線
+    time_offset_sec = len(X_train) * dt
+    plt.axvline(x=time_offset_sec, color='red', linestyle='--', label='End of Set 1')
+
+    plt.xlabel('Time (s)')
+    plt.ylabel('Decoding Error (Normalized)')
+    plt.title('Evolution of Decoding Error (using Actual Data Statistics)')
+    plt.yscale('log')
+    plt.grid(True, which="both", ls="-", alpha=0.5)
+    plt.legend()
+    plt.savefig(current_save_dir / "Final_Decoding_Error.png")
+    plt.close()
 
     # プロット
 # Trainデータのプロット
