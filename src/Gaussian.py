@@ -6,33 +6,31 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app import appMNIST as appNIST
+from app import appGaussian as appssian
 
 if __name__ == "__main__":
     # ---------------------------------------------------------
     # 設定
     # ---------------------------------------------------------
-    Nneuron = 1000   
-    Nx = 784
-    Nclasses = 10        
+    Nneuron = 100   
+    Nx = 2
+    Nclasses = 2        
     
     leak = 50       
     dt = 0.001      
 
-    epsr = 0.03    
-    epsf = 0.003   
+    epsr = 0.5
+    epsf = 0.05  
     
     alpha = 0.18    
-    beta = 0.5 / 0.9  
-    mu = 0.03 / 0.9 
-    Gain = 30
+    beta = 1 / 0.9  
+    mu = 0.02 / 0.9
     
     Thresh = 0.5
-    Duration = 100
-    lr_readout = 0.0002
+    lr_readout = 0.0005
     
     # 保存先設定
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(identity-cannyedges)")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(Gaussian_exp)")
     base_save_dir = Path("results")
     current_save_dir = base_save_dir / timestamp
     current_save_dir.mkdir(parents=True, exist_ok=True)
@@ -44,27 +42,26 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X_train, y_train = appNIST.load_and_preprocess("identity_test_images.npy", "identity_test_labels.npy")
-    X_test, y_test = appNIST.load_and_preprocess("cannyedges_test_images.npy", "cannyedges_test_labels.npy")
+    X, y = appssian.generate_continuous_shift_dataset(n_train=100000, n_test=100000, nx=2, sigma=5, seed=30,
+                                      train_params={'mean': [1.0, 0.0], 'std': [2.0, 1.0]},
+                                      test_params={'mean': 0.0, 'std': 1.0})
 
-    X_train = X_train.astype(np.float32) / 255.0
-    X_test = X_test.astype(np.float32) / 255.0
-
-    # 確認
-    # print(f"Set 1 shape: {X_train.shape}, Max val: {np.max(X_train)}") 
-    # print(f"Set 2 shape: {X_test.shape}, Max val: {np.max(X_test)}")
-
+    X_train = X[:100000]
+    y_train = y[:100000]
+    X_test = X[100000:]
+    y_test = y[100000:]
     # ---------------------------------------------------------
     # Set 1: Learning
     # ---------------------------------------------------------
     print("--- Phase 1: Learning on Set 1 ---")
-    F_initial, C_initial, W_out_initial, b_out_initial = appNIST.init_weights(Nx, Nneuron, Nclasses)
+    F_initial, C_initial, W_out_initial, b_out_initial = appssian.init_weights(Nx, Nneuron, Nclasses)
 
     # 戻り値の最後に final_states_1 を受け取る
-    acc_hist_1, spk_t_1, spk_i_1, F_set1, C_set1, W_out_set1, b_out_set1, mem_var_1, final_states_1 = appNIST.train_readout_mnistc_Retrain(
-        F_initial, C_initial, W_out_initial, b_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, epsf, epsr, alpha, beta, mu, retrain=True,
-        Duration=Duration, lr_readout=lr_readout, init_states=None # 最初は指定なし
+    acc_hist_1, spk_t_1, spk_i_1, F_set1, C_set1, W_out_set1, b_out_set1, mem_var_1, final_states_1 = appssian.test_train_continuous(
+        F_initial, C_initial, W_out_initial, b_out_initial, X_train, y_train, Nneuron, Nx, Nclasses, dt, leak, Thresh, epsf, epsr, alpha, beta, mu,
+        retrain=True, Gain=8000, lr_readout=lr_readout, init_states=None # 最初は指定なし
     )
+    print(len(acc_hist_1))
     
     # ---------------------------------------------------------
     # Set 2: Learning
@@ -72,10 +69,11 @@ if __name__ == "__main__":
     print("--- Phase 2: Learning on Set 2 ---")
 
     # init_states に Set 1 の終わりの状態を渡す
-    acc_hist_2, spk_t_2, spk_i_2, *_, mem_var_2, final_states_2 = appNIST.train_readout_mnistc_Retrain(
-        F_set1, C_set1, W_out_set1, b_out_set1, X_test, y_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, epsf, epsr, alpha, beta, mu, retrain=None,
-        Duration=Duration, lr_readout=lr_readout, init_states=final_states_1 # ★ここで引き継ぎ！
+    acc_hist_2, spk_t_2, spk_i_2, *_, mem_var_2, final_states_2 = appssian.test_train_continuous(
+        F_set1, C_set1, W_out_set1, b_out_set1, X_test, y_test, Nneuron, Nx, Nclasses, dt, leak, Thresh, epsf, epsr, alpha, beta, mu,
+        retrain=True, Gain=8000, lr_readout=lr_readout, init_states=final_states_1 # ★ここで引き継ぎ！
     )
+    print(len(acc_hist_2))
 
     # ---------------------------------------------------------
     # Data Combination
@@ -112,7 +110,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     
     # --- 移動平均の計算 ---
-    window_size = 500  # 平均を取る範囲 (この数値を大きくするとより滑らかになります)
+    window_size = 2000  # 平均を取る範囲 (この数値を大きくするとより滑らかになります)
     if len(full_acc) >= window_size:
         # 移動平均フィルタの作成
         b = np.ones(window_size) / window_size
@@ -136,7 +134,7 @@ if __name__ == "__main__":
     
     plt.xlabel('Input Samples')
     plt.ylabel('Accuracy')
-    plt.title('Classification Accuracy History (identity-cannyedges)')
+    plt.title('Classification Accuracy History')
     plt.ylim(0, 1.05)
     plt.grid(True)
     plt.legend()
@@ -160,7 +158,7 @@ if __name__ == "__main__":
 
     plt.xlabel('Time (ms)')
     plt.ylabel('Neuron Index')
-    plt.title('Spike Raster Plot (identity-cannyedges)')
+    plt.title('Spike Raster Plot')
     plt.xlim(left=0, right=np.max(full_spk_t)) # 軸の範囲をデータの最大値に合わせる
     plt.ylim(0, Nneuron)
     plt.legend(loc='upper right')
@@ -176,7 +174,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     
     # 変動が激しい場合は移動平均を見やすくする
-    mem_window_size = 50
+    mem_window_size = 1000
     if len(full_mem_var) >= mem_window_size:
         b = np.ones(mem_window_size) / mem_window_size
         full_mem_smooth = np.convolve(full_mem_var, b, mode='valid')
@@ -193,7 +191,7 @@ if __name__ == "__main__":
     
     plt.xlabel('Input Samples')
     plt.ylabel('Voltage Variance per Neuron')
-    plt.title('Evolution of the Variance of the Membrane Potential (identity-cannyedges)')
+    plt.title('Evolution of the Variance of the Membrane Potential')
     plt.grid(True)
     plt.legend()
     
@@ -204,3 +202,34 @@ if __name__ == "__main__":
     plt.savefig(mem_plot_path)
     plt.close()
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
+
+    # プロット
+plt.figure(figsize=(8, 8))
+plt.scatter(X_train[y_train==0, 0], X_train[y_train==0, 1], c='blue', alpha=0.5, label='Class 0')
+plt.scatter(X_train[y_train==1, 0], X_train[y_train==1, 1], c='red', alpha=0.5, label='Class 1')
+# 軌跡を描画して「時系列的なつながり」を確認
+plt.plot(X_train[:, 0], X_train[:, 1], c='gray', alpha=0.2, linewidth=1)
+
+plt.title("Smoothed Random Walk with Non-linear Boundary")
+plt.xlabel("Input Dimension 1")
+plt.ylabel("Input Dimension 2")
+plt.legend()
+plt.grid(True)
+plt.axis('equal') # アスペクト比を揃える
+plt.savefig("smoothed_dataset_train.png")
+plt.close()
+
+plt.figure(figsize=(8, 8))
+plt.scatter(X_test[y_test==0, 0], X_test[y_test==0, 1], c='blue', alpha=0.5, label='Class 0')
+plt.scatter(X_test[y_test==1, 0], X_test[y_test==1, 1], c='red', alpha=0.5, label='Class 1')
+# 軌跡を描画して「時系列的なつながり」を確認
+plt.plot(X_test[:, 0], X_test[:, 1], c='gray', alpha=0.2, linewidth=1)
+
+plt.title("Smoothed Random Walk with Non-linear Boundary")
+plt.xlabel("Input Dimension 1")
+plt.ylabel("Input Dimension 2")
+plt.legend()
+plt.grid(True)
+plt.axis('equal') # アスペクト比を揃える
+plt.savefig("smoothed_dataset_test.png")
+plt.close()

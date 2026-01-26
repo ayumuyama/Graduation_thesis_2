@@ -43,10 +43,12 @@ def load_and_preprocess(image_file_name, label_file_name, data_dir="data", num_c
     return X, y
 
 def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data, 
-                                         Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, 
-                                         epsf, epsr, alpha, beta, mu,
-                                         Duration=30, 
-                                         lr_readout=0.008):
+                                 Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, 
+                                 epsf, epsr, alpha, beta, mu, retrain,
+                                 Duration=30, 
+                                 lr_readout=0.008,
+                                 # ★追加: 初期状態を受け取る引数 (デフォルトはNone)
+                                 init_states=None):
     
     NumSamples = X_data.shape[0]
     print(f"Phase : Training")
@@ -56,41 +58,48 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data,
     W_out = W_out.copy()
     b_out = b_out.copy()    
     
-    V = np.zeros(Nneuron)
-    
+    # ★変更: 初期状態のセットアップ
+    if init_states is None:
+        # 初回（Set 1）や指定がない場合はゼロ初期化
+        V = np.zeros(Nneuron)
+        rO = np.zeros(Nneuron)
+        x = np.zeros(Nx)
+    else:
+        # 引き継ぎがある場合はそれを使う
+        V = init_states['V'].copy()
+        rO = init_states['rO'].copy()
+        x = init_states['x'].copy()
+
     Id = np.eye(Nneuron)
+    # O と k は瞬時値なので0リセットでOK（あるいは引き継いでも良いが大差なし）
     O = 0
     k = 0
 
     total_spikes = 0
-
     acc_history = []
     acc_buffer = []
     spike_times = []
     spike_neurons = []
-
-    # 追加: 膜電位分散の履歴用リスト
     membrane_var_history = []
     
     for i in range(NumSamples):
         if i % 100 == 0:
-            print(f'\r  Phase 1 Iter: {i}/{NumSamples} (Spikes: {total_spikes})', end='')
+            print(f'\r  Phase Iter: {i}/{NumSamples} (Spikes: {total_spikes})', end='')
 
-        x = np.zeros(Nx)
-        rO = np.zeros(Nneuron)
-
+        # ★削除: ここにあった x = np.zeros(Nx), rO = np.zeros(Nneuron) を削除！
+        # これにより、前の画像の活動（rO）や入力フィルタ（x）が次の画像に影響を与えます。
+        
         raw_img = X_data[i]     
         img = raw_img * Gain
         target_vec = y_data[i].copy()
+        target_label = np.argmax(target_vec)
 
-        img_correct_counts = 0
         time_offset = i * Duration * dt
-        
-        # 追加: この画像の提示期間中の全ニューロンの膜電位を記録するバッファ
-        # shape: (Nneuron, Duration)
         V_temporal_buffer = np.zeros((Nneuron, Duration))
+        pred_history = []
 
         for t in range(Duration):
+            # ... (中身の計算処理は変更なし) ...
             noise = 0.02 * np.random.randn(Nneuron)
             recurrent_input = 0
             if O == 1:
@@ -99,13 +108,13 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data,
             V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
             x = (1 - leak * dt) * x + dt * img 
             
-            # 追加: 現在の膜電位をバッファに保存
             V_temporal_buffer[:, t] = V
-
+            
+            # ... (スパイク生成、重み更新などの処理) ...
             thresh_noise = 0.01 * np.random.randn(Nneuron)
             potentials = V - Thresh - thresh_noise
             k_curr = np.argmax(potentials)
-            
+
             if potentials[k_curr] >= 0:
                 O = 1
                 k = k_curr
@@ -113,39 +122,164 @@ def train_readout_mnistc_Retrain(F_init, C_init, W_out, b_out, X_data, y_data,
                 spike_neurons.append(k)
                 total_spikes += 1
                 
-                # --- F, C の更新 ---
-                F[:, k] += epsf * (alpha * x - F[:, k])
-                C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+                if retrain:
+                    F[:, k] += epsf * (alpha * x - F[:, k])
+                    C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
             else:
                 O = 0
-                
+
             rO = (1 - leak * dt) * rO
             if O == 1:
                 rO[k] += 1.0
-
-            # --- Readout Learning ---
+            
+            # Readout Learning
             y_est_vec = np.dot(W_out, rO) + b_out
             pred_idx = np.argmax(y_est_vec)
+            pred_history.append(pred_idx)
+            
             error_vec = target_vec - y_est_vec
             W_out += lr_readout * np.outer(error_vec, rO)
             b_out += lr_readout * error_vec
             
-            if pred_idx == np.argmax(target_vec):
-                img_correct_counts += 1
-        
-        # 追加: 画像提示終了後、分散を計算
-        # axis=1 (時間方向) の分散を計算 -> (Nneuron,)
-        # その後、全ニューロンの平均をとる -> scalar
-        var_per_neuron = np.var(V_temporal_buffer, axis=1)
-        mean_var = np.mean(var_per_neuron)
-        membrane_var_history.append(mean_var)
+            # ... (ループ終了) ...
 
-        is_correct = 1 if (img_correct_counts / Duration) > 0.5 else 0
+        # 正誤判定や分散計算
+        counts = np.bincount(pred_history, minlength=Nclasses)
+        final_prediction = np.argmax(counts)
+        is_correct = 1 if final_prediction == target_label else 0
         acc_buffer.append(is_correct)
         if len(acc_buffer) > 200: acc_buffer.pop(0)
         acc_history.append(np.mean(acc_buffer))
 
-    print(f"\nPhase 2 Completed. Final Accuracy: {acc_history[-1]:.4f}")
+        var_per_neuron = np.var(V_temporal_buffer, axis=1)
+        mean_var = np.mean(var_per_neuron)
+        membrane_var_history.append(mean_var)
+
+    print(f"\nPhase Completed. Final Accuracy: {acc_history[-1]:.4f}")
     
-    # 戻り値の最後に membrane_var_history を追加
-    return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history
+    # ★追加: 最終状態を辞書にまとめる
+    final_states = {'V': V, 'rO': rO, 'x': x}
+
+    # 戻り値に final_states を追加
+    return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, final_states
+
+def train_readout_mnistc_Retrain_fine(F_init, C_init, W_out, b_out, X_data, y_data, 
+                                 Nneuron, Nx, Nclasses, dt, leak, Thresh, Gain, 
+                                 epsf, epsr, alpha, beta, mu, retrain,
+                                 Duration=30, 
+                                 lr_readout=0.008,
+                                 # ★追加: 初期状態を受け取る引数 (デフォルトはNone)
+                                 init_states=None):
+    
+    NumSamples = X_data.shape[0]
+    print(f"Phase : Training")
+    
+    F = F_init.copy()
+    C = C_init.copy()
+    W_out = W_out.copy()
+    b_out = b_out.copy()    
+    
+    # ★変更: 初期状態のセットアップ
+    if init_states is None:
+        # 初回（Set 1）や指定がない場合はゼロ初期化
+        V = np.zeros(Nneuron)
+        rO = np.zeros(Nneuron)
+        x = np.zeros(Nx)
+    else:
+        # 引き継ぎがある場合はそれを使う
+        V = init_states['V'].copy()
+        rO = init_states['rO'].copy()
+        x = init_states['x'].copy()
+
+    Id = np.eye(Nneuron)
+    # O と k は瞬時値なので0リセットでOK（あるいは引き継いでも良いが大差なし）
+    O = 0
+    k = 0
+
+    total_spikes = 0
+    acc_history = []
+    acc_buffer = []
+    spike_times = []
+    spike_neurons = []
+    membrane_var_history = []
+    
+    for i in range(NumSamples):
+        if i % 100 == 0:
+            print(f'\r  Phase Iter: {i}/{NumSamples} (Spikes: {total_spikes})', end='')
+
+        # ★削除: ここにあった x = np.zeros(Nx), rO = np.zeros(Nneuron) を削除！
+        # これにより、前の画像の活動（rO）や入力フィルタ（x）が次の画像に影響を与えます。
+        
+        raw_img = X_data[i]     
+        img = raw_img * Gain
+        target_vec = y_data[i].copy()
+        target_label = np.argmax(target_vec)
+
+        time_offset = i * Duration * dt
+        V_temporal_buffer = np.zeros((Nneuron, Duration))
+        pred_history = []
+
+        for t in range(Duration):
+            # ... (中身の計算処理は変更なし) ...
+            noise = 0.02 * np.random.randn(Nneuron)
+            recurrent_input = 0
+            if O == 1:
+                recurrent_input = C[:, k]
+
+            V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
+            x = (1 - leak * dt) * x + dt * img 
+            
+            V_temporal_buffer[:, t] = V
+            
+            # ... (スパイク生成、重み更新などの処理) ...
+            thresh_noise = 0.01 * np.random.randn(Nneuron)
+            potentials = V - Thresh - thresh_noise
+            k_curr = np.argmax(potentials)
+
+            if potentials[k_curr] >= 0:
+                O = 1
+                k = k_curr
+                spike_times.append(time_offset + t * dt)
+                spike_neurons.append(k)
+                total_spikes += 1
+                
+                if retrain:
+                    F[:, k] += epsf * (alpha * x - F[:, k])
+                    C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+            else:
+                O = 0
+
+            rO = (1 - leak * dt) * rO
+            if O == 1:
+                rO[k] += 1.0
+            
+            # Readout Learning
+            y_est_vec = np.dot(W_out, rO) + b_out
+            pred_idx = np.argmax(y_est_vec)
+            pred_history.append(pred_idx)
+            
+            error_vec = target_vec - y_est_vec
+            W_out += lr_readout * np.outer(error_vec, rO)
+            b_out += lr_readout * error_vec
+            
+            # ... (ループ終了) ...
+
+        # 正誤判定や分散計算
+        counts = np.bincount(pred_history, minlength=Nclasses)
+        final_prediction = np.argmax(counts)
+        is_correct = 1 if final_prediction == target_label else 0
+        acc_buffer.append(is_correct)
+        if len(acc_buffer) > 200: acc_buffer.pop(0)
+        acc_history.append(np.mean(acc_buffer))
+
+        var_per_neuron = np.var(V_temporal_buffer, axis=1)
+        mean_var = np.mean(var_per_neuron)
+        membrane_var_history.append(mean_var)
+
+    print(f"\nPhase Completed. Final Accuracy: {acc_history[-1]:.4f}")
+    
+    # ★追加: 最終状態を辞書にまとめる
+    final_states = {'V': V, 'rO': rO, 'x': x}
+
+    # 戻り値に final_states を追加
+    return acc_history, spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, final_states
