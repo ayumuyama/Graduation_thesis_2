@@ -51,7 +51,7 @@ def generate_continuous_shift_dataset(n_train=5000, n_test=5000, nx=2, sigma=30,
     return X
 
 def compute_snapshot_decoding_error(F_frozen, C_frozen, input_sequence, 
-                                    dt, leak, Thresh, Gain=1):
+                                    dt, leak, Thresh, Gain=200, initial_state=None):
     """
     現在の重みを固定し、渡されたデータ配列(input_sequence)に対する
     復号化誤差(Decoding Error)を計算する関数
@@ -60,17 +60,22 @@ def compute_snapshot_decoding_error(F_frozen, C_frozen, input_sequence,
     Nx = input_sequence.shape[1]
     Nneuron = F_frozen.shape[1]
     
-    # ネットワーク変数の初期化
-    V = np.zeros(Nneuron)
-    rO = np.zeros(Nneuron)
-    x = np.zeros(Nx)
+    if initial_state is None:
+        V = np.zeros(Nneuron)
+        rO = np.zeros(Nneuron)
+        x = np.zeros(Nx)
+    else:
+        # ★メインループの状態をコピーしてスタート地点にする
+        V = initial_state['V'].copy()
+        rO = initial_state['rO'].copy()
+        x = initial_state['x'].copy()
     
     # スパイク等の履歴
     rO_list = []
     x_target_list = []
     
     # 過渡応答を避けるためのバッファ
-    transient_steps = min(500, test_steps // 4)
+    transient_steps = min(100, test_steps // 20)
     
     # --- 評価用実行ループ (重み更新なし) ---
     O_vec = np.zeros(Nneuron)
@@ -100,9 +105,10 @@ def compute_snapshot_decoding_error(F_frozen, C_frozen, input_sequence,
         
         if potentials[k_curr] >= 0:
             O_vec[k_curr] = 1.0
-        
+            rO = rO + O_vec             # 先に足す
+
         # rO 更新
-        rO = (1 - leak * dt) * rO + O_vec
+        rO = (1 - leak * dt) * rO
         
         # 履歴保存 (過渡応答終了後)
         if t >= transient_steps:
@@ -141,7 +147,7 @@ def compute_snapshot_decoding_error(F_frozen, C_frozen, input_sequence,
 
 def test_train_continuous_nonclass(F_init, C_init, X_data,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain, Gain=1,
+                          alpha, beta, mu, retrain, Gain=200,
                           epsr=0.05, epsf=0.005, init_states=None):
     
     TotalTime = X_data.shape[0]
@@ -187,9 +193,16 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
             if t + test_chunk_size < TotalTime:
                 # 実際のデータセットからテストデータを切り出す
                 test_sequence = X_data[t : t + test_chunk_size]
+
+                current_state_snapshot = {
+                    'V': V,
+                    'rO': rO,
+                    'x': x
+                }
                 
                 d_err = compute_snapshot_decoding_error(
-                    F, C, test_sequence, dt, leak, Thresh, Gain
+                    F, C, test_sequence, dt, leak, Thresh, Gain,
+                    initial_state=current_state_snapshot
                 )
                 decoding_error_history.append(d_err)
                 # print(f" [Eval t={t}] DecErr: {d_err:.4f}") # デバッグ用
@@ -236,14 +249,18 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
             spike_neurons.append(k)
             
             if retrain:
+                if t < 100:
+                    print(f" Step {t}: epsf={epsf:.6f}, epsr={epsr:.6f}")
+
                 F[:, k] += epsf * (alpha * x - F[:, k])
                 C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+
+            rO[k] += 1.0
+
         else:
             O = 0
 
         rO = (1 - leak * dt) * rO
-        if O == 1:
-            rO[k] += 1.0
 
         membrane_var_history.append(np.var(V))
     
@@ -254,7 +271,7 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
 
 def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain, Gain=1,
+                          alpha, beta, mu, retrain, Gain=200,
                           eps=0.005, init_states=None):
     
     TotalTime = X_data.shape[0]
@@ -300,9 +317,16 @@ def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
             if t + test_chunk_size < TotalTime:
                 # 実際のデータセットからテストデータを切り出す
                 test_sequence = X_data[t : t + test_chunk_size]
+
+                current_state_snapshot = {
+                    'V': V,
+                    'rO': rO,
+                    'x': x
+                }
                 
                 d_err = compute_snapshot_decoding_error(
-                    F, C, test_sequence, dt, leak, Thresh, Gain
+                    F, C, test_sequence, dt, leak, Thresh, Gain,
+                    initial_state=current_state_snapshot
                 )
                 decoding_error_history.append(d_err)
                 # print(f" [Eval t={t}] DecErr: {d_err:.4f}") # デバッグ用
@@ -357,14 +381,17 @@ def test_train_continuous_suggest_nonclass(F_init, C_init, X_data,
                 # epsr = 10 * epsf
                 current_epsf = eps * current_var
                 current_epsr = 10 * current_epsf
+                if t < 100:
+                    print(f" Step {t}: Var={current_var:.4f}, epsf={current_epsf:.6f}, epsr={current_epsr:.6f}")
                 F[:, k] += current_epsf * (alpha * x - F[:, k])
                 C[:, k] -= current_epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+
+            rO[k] += 1.0
+
         else:
             O = 0
 
         rO = (1 - leak * dt) * rO
-        if O == 1:
-            rO[k] += 1.0
 
         membrane_var_history.append(np.var(V))
     
