@@ -23,7 +23,7 @@ def generate_continuous_shift_dataset(n_train=5000, n_test=5000, nx=2, sigma=30,
     w = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((t_kernel - 500)**2) / (2 * sigma**2))
     w = w / np.sum(w)
 
-    # 2. ホワイトノイズの生成（前半・後半を別々に作る）
+    # 2. ノイズデータ生成
     # Trainパート
     noise_train = np.random.normal(
         loc=train_params['mean'], 

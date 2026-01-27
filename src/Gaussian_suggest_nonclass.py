@@ -38,29 +38,23 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=23,
-                                      train_params={'mean': [0.0, 0.0], 'std': [1.0, 4.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [4.0, 1.0]})
+    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=23,
+                                      train_params={'mean': [1.0, 5.0], 'std': [1.0, 5.0]},
+                                      test_params={'mean': [5.0, 1.0], 'std': [5.0, 1.0]})
 
-    X_train = X[:400000]
-    X_test = X[400000:]
+    X_train = X[:1000000]
+    X_test = X[1000000:]
     # ---------------------------------------------------------
     # Set 1: Learning
     # ---------------------------------------------------------
     print("--- Phase 1: Learning on Set 1 ---")
     F_initial, C_initial, *_ = appssian.init_weights(Nx, Nneuron, Nclasses)
 
-    # 戻り値の最後に final_states_1 を受け取る
-    # spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, weight_error_1, final_states_1 = appssian.test_train_continuous_suggest_nonclass(
-    #     F_initial, C_initial, X_train,
-    #     Nneuron, Nx, Nclasses, dt, leak, Thresh,
-    #     alpha, beta, mu, retrain=True, Gain=200, eps=0.0001, init_states=None)
-
-    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = appssian.test_train_continuous_nonclass(
+    spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = appssian.test_train_continuous_suggest_nonclass(
         F_initial, C_initial, X_train,
         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
         alpha, beta, mu, retrain=True, Gain=200,
-        epsr=0.001, epsf=0.0001, init_states=None)
+        eps=0.0001, init_states=None)
     
     # ---------------------------------------------------------
     # Set 2: Learning
@@ -84,8 +78,6 @@ if __name__ == "__main__":
     full_mem_var = mem_var_1 + mem_var_2
 
     # 2. Spikeデータの結合
-    # spk_t_2 の時間は 0 から始まっている可能性が高いため、
-    # spk_t_1 の最後の時間をオフセットとして加算して時間を繋げます。
     
     # 計算用にnumpy配列へ変換
     t1 = np.array(spk_t_1)
@@ -190,7 +182,7 @@ if __name__ == "__main__":
 
     # 符号化誤差
     plt.figure(figsize=(10, 6))
-    plt.plot(time_axis_dec, full_dec_err, 'o-', color='orange', label='Decoding Error', markersize=4)
+    plt.plot(time_axis_dec, full_dec_err, 'o-', color='black', label='Decoding Error', markersize=4)
     
     # 境界線
     time_offset_sec = len(X_train) * dt
@@ -198,8 +190,9 @@ if __name__ == "__main__":
 
     plt.xlabel('Time (s)')
     plt.ylabel('Decoding Error (Normalized)')
-    plt.title('Evolution of Decoding Error (using Actual Data Statistics)')
+    # plt.title('Evolution of Decoding Error (using Actual Data Statistics)')
     plt.yscale('log')
+    plt.ylim(0.01, 0.6)
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.legend()
     plt.savefig(current_save_dir / "Final_Decoding_Error.png")

@@ -38,12 +38,12 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X = appssian.generate_continuous_shift_dataset(n_train=400000, n_test=400000, nx=2, sigma=5, seed=23,
-                                      train_params={'mean': [0.0, 0.0], 'std': [1.0, 4.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [4.0, 1.0]})
+    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=23,
+                                      train_params={'mean': [1.0, 5.0], 'std': [1.0, 5.0]},
+                                      test_params={'mean': [5.0, 1.0], 'std': [5.0, 1.0]})
 
-    X_train = X[:400000]
-    X_test = X[400000:]
+    X_train = X[:1000000]
+    X_test = X[1000000:]
     # ---------------------------------------------------------
     # Set 1: Learning
     # ---------------------------------------------------------
@@ -64,10 +64,10 @@ if __name__ == "__main__":
 
     # init_states に Set 1 の終わりの状態を渡す
     spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, w_err_2, d_err_2, final_states_2 = appssian.test_train_continuous_nonclass(
-                          F_initial, C_initial, X_test,
+                          F_set1, C_set1, X_test,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
                           alpha, beta, mu, retrain=True, Gain=200,
-                          epsr=0.001, epsf=0.0001, init_states=None)
+                          epsr=0.001, epsf=0.0001, init_states=final_states_1)
     
     # ---------------------------------------------------------
     # Data Combination
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
     # 符号化誤差
     plt.figure(figsize=(10, 6))
-    plt.plot(time_axis_dec, full_dec_err, 'o-', color='orange', label='Decoding Error', markersize=4)
+    plt.plot(time_axis_dec, full_dec_err, 'o-', color='black', label='Decoding Error', markersize=4)
     
     # 境界線
     time_offset_sec = len(X_train) * dt
@@ -192,8 +192,9 @@ if __name__ == "__main__":
 
     plt.xlabel('Time (s)')
     plt.ylabel('Decoding Error (Normalized)')
-    plt.title('Evolution of Decoding Error (using Actual Data Statistics)')
+    # plt.title('Evolution of Decoding Error (using Actual Data Statistics)')
     plt.yscale('log')
+    plt.ylim(0.01, 0.6)
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.legend()
     plt.savefig(current_save_dir / "Final_Decoding_Error.png")
