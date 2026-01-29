@@ -38,9 +38,9 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=23,
-                                      train_params={'mean': [0.0, 0.0], 'std': [1.0, 5.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [5.0, 1.0]})
+    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=35,
+                                      train_params={'mean': [5.0, 5.0], 'std': [1.0, 5.0]},
+                                      test_params={'mean': [-5.0, -5.0], 'std': [5.0, 1.0]})
 
     X_train = X[:1000000]
     X_test = X[1000000:]
@@ -185,7 +185,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # ★新規追加: Plot 4: Evolution of Decoding Error
     # ---------------------------------------------------------
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 3))
     
     plt.plot(time_axis_dec, full_dec_err, 'o-', color='black', label='Decoding Error', markersize=4)
     
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     
     plt.tick_params(axis='both', labelsize=20)
 
-    plt.ylim(0.0, 1.0)
+    plt.ylim(0.0, 0.5)
     plt.grid(True, which="both", ls="-", alpha=0.5)
     
     plt.legend(fontsize=20, loc='upper left')

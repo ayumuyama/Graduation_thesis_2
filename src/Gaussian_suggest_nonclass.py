@@ -38,10 +38,10 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=23,
-                                      train_params={'mean': [0.0, 0.0], 'std': [1.0, 5.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [5.0, 1.0]})
-
+    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=35,
+                                      train_params={'mean': [5.0, 5.0], 'std': [1.0, 5.0]},
+                                      test_params={'mean': [-5.0, -5.0], 'std': [5.0, 1.0]})
+    
     X_train = X[:1000000]
     X_test = X[1000000:]
     # ---------------------------------------------------------
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # ★新規追加: Plot 4: Evolution of Decoding Error
     # ---------------------------------------------------------
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 3))
     
     plt.plot(time_axis_dec, full_dec_err, 'o-', color='black', label='Decoding Error', markersize=4)
     
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     
     plt.tick_params(axis='both', labelsize=20)
 
-    plt.ylim(0.0, 1.0)
+    plt.ylim(0.0, 0.5)
     plt.grid(True, which="both", ls="-", alpha=0.5)
     
     plt.legend(fontsize=20, loc='upper left')
@@ -231,4 +231,20 @@ plt.legend()
 plt.grid(True)
 plt.axis('equal')
 plt.savefig("smoothed_dataset_test.png")
+plt.close()
+
+# Testデータのプロット
+plt.figure(figsize=(8, 8))
+# 全データ（X_test）を青い点(c='blue')でプロット
+plt.scatter(X[:, 0], X[:, 1], c='blue', alpha=0.5, label='Data Points')
+# 軌跡を描画
+plt.plot(X[:, 0], X[:, 1], c='gray', alpha=0.2, linewidth=1)
+
+plt.title("Smoothed Random Walk (Total)")
+plt.xlabel("Input Dimension 1")
+plt.ylabel("Input Dimension 2")
+plt.legend()
+plt.grid(True)
+plt.axis('equal')
+plt.savefig("smoothed_dataset_total.png")
 plt.close()
