@@ -130,17 +130,19 @@ def compute_snapshot_decoding_error(F_frozen, C_frozen, input_sequence,
         # 再構成信号
         X_est = R_response @ Dec_T
         
-        # 誤差分散の比率 (Normalization by target variance)
-        # 各次元の分散の和をとる
-        var_error = np.sum(np.var(X_target - X_est, axis=0))
-        var_target = np.sum(np.var(X_target, axis=0))
+        # ★変更点: 平均二乗誤差 (Mean Squared Error) の計算
+        # 元のコード: 分散比 (1 - R^2 のような指標)
+        # 今回の変更: 単純な二乗誤差の平均 (MSE)
         
-        if var_target > 1e-12:
-            decoding_error = var_error / var_target
-        else:
-            decoding_error = 1.0
+        error_sq = (X_target - X_est) ** 2
+        decoding_error = np.mean(error_sq)
+        
+        # もし「平均」ではなく「総和 (Sum of Squared Errors)」が必要な場合は
+        # decoding_error = np.sum(error_sq) 
+        # としてください。一般的にはステップ数に依存しない mean が使いやすいです。
             
     except np.linalg.LinAlgError:
+        # エラー発生時は安全策として大きめの値を返す（文脈に応じて調整してください）
         decoding_error = 1.0
         
     return decoding_error

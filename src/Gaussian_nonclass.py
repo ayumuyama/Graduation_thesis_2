@@ -39,8 +39,8 @@ if __name__ == "__main__":
     print("Preparing Data...")
 
     X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=23,
-                                      train_params={'mean': [1.0, 5.0], 'std': [1.0, 5.0]},
-                                      test_params={'mean': [5.0, 1.0], 'std': [5.0, 1.0]})
+                                      train_params={'mean': [0.0, 0.0], 'std': [1.0, 5.0]},
+                                      test_params={'mean': [0.0, 0.0], 'std': [5.0, 1.0]})
 
     X_train = X[:1000000]
     X_test = X[1000000:]
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = appssian.test_train_continuous_nonclass(
                           F_initial, C_initial, X_train,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=200,
+                          alpha, beta, mu, retrain=True, Gain=100,
                           epsr=0.001, epsf=0.0001, init_states=None)
     
     # ---------------------------------------------------------
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, w_err_2, d_err_2, final_states_2 = appssian.test_train_continuous_nonclass(
                           F_set1, C_set1, X_test,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=200,
+                          alpha, beta, mu, retrain=True, Gain=100,
                           epsr=0.001, epsf=0.0001, init_states=final_states_1)
     
     # ---------------------------------------------------------
@@ -182,22 +182,28 @@ if __name__ == "__main__":
     plt.close()
     print(f"Weight Convergence plot saved to: {weight_plot_path}")
 
-    # 符号化誤差
+    # ---------------------------------------------------------
+    # ★新規追加: Plot 4: Evolution of Decoding Error
+    # ---------------------------------------------------------
     plt.figure(figsize=(10, 6))
+    
     plt.plot(time_axis_dec, full_dec_err, 'o-', color='black', label='Decoding Error', markersize=4)
     
     # 境界線
     time_offset_sec = len(X_train) * dt
-    plt.axvline(x=time_offset_sec, color='red', linestyle='--', label='End of Set 1')
+    plt.axvline(x=time_offset_sec, color='red', linestyle='--', label='Domain Shift Point')
 
-    plt.xlabel('Time (s)')
-    plt.ylabel('Decoding Error (Normalized)')
-    # plt.title('Evolution of Decoding Error (using Actual Data Statistics)')
-    plt.yscale('log')
-    plt.ylim(0.01, 0.6)
+    plt.xlabel('Time (s)', fontsize=24)
+    plt.ylabel('Decoding Error', fontsize=24)
+    
+    plt.tick_params(axis='both', labelsize=20)
+
+    plt.ylim(0.0, 1.0)
     plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.legend()
-    plt.savefig(current_save_dir / "Final_Decoding_Error.png")
+    
+    plt.legend(fontsize=20, loc='upper left')
+
+    plt.savefig(current_save_dir / "Final_Decoding_Error.png", bbox_inches='tight')
     plt.close()
 
     # プロット
