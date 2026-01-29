@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 from pathlib import Path
 
-def load_data_for_subject(subject_id, data_dir):
+def load_data_for_subject(subject_id, data_dir, repeat_count=1):
     """
     指定されたsubject_idに対応するデータを読み込み、
     (N, 6, 128)の入力データと(N, 1)のラベルを返す関数。
@@ -12,10 +12,11 @@ def load_data_for_subject(subject_id, data_dir):
     Args:
         subject_id (int): 抽出したい被験者のID (例: 1)
         data_dir (str): 'data' ディレクトリへのパス
+        repeat_count (int): データを繰り返す回数 (デフォルト: 1)
         
     Returns:
-        X (np.array): 入力データ。形状は (サンプル数, 6, 128)
-        y (np.array): 教師ラベル。形状は (サンプル数, 1)
+        X (np.array): 入力データ。形状は (サンプル数 * repeat_count, 6, 128)
+        y (np.array): 教師ラベル。形状は (サンプル数 * repeat_count, 1)
     """
     
     # 1. subject_train.txt を読み込み、対象の行インデックスを特定
@@ -23,7 +24,6 @@ def load_data_for_subject(subject_id, data_dir):
     subjects = np.loadtxt(subject_path).astype(int)
     
     # subject_id に一致する行のインデックスを取得 (0始まりのインデックス)
-    # 例: subject_id=1 の場合、0〜346番目のインデックスが取得される
     target_indices = np.where(subjects == subject_id)[0]
     
     if len(target_indices) == 0:
@@ -36,7 +36,6 @@ def load_data_for_subject(subject_id, data_dir):
     y = y_all[target_indices].reshape(-1, 1) # (N, 1) の形に整える
 
     # 3. Inertial Signals の6つのファイルを読み込み、対象行を抽出して結合
-    # 読み込むファイルリスト (Body Acc XYZ, Body Gyro XYZ の6つ)
     signal_files = [
         "body_acc_x_train.txt", "body_acc_y_train.txt", "body_acc_z_train.txt",
         "body_gyro_x_train.txt", "body_gyro_y_train.txt", "body_gyro_z_train.txt"
@@ -49,7 +48,6 @@ def load_data_for_subject(subject_id, data_dir):
         file_path = os.path.join(signals_dir, filename)
         
         # ファイルを読み込む
-        # 各ファイルは (全サンプル数, 128) の形状
         data = np.loadtxt(file_path)
         
         # 対象のsubjectの行だけを抽出
@@ -57,8 +55,16 @@ def load_data_for_subject(subject_id, data_dir):
         loaded_signals.append(subject_data)
 
     # 4. データをスタックして (N, 6, 128) の形状にする
-    # axis=1 でスタックすることで、(サンプル数, チャンネル数, 時間) となる
     X = np.stack(loaded_signals, axis=1)
+
+    # --- 変更点: データを指定回数繰り返す ---
+    if repeat_count > 1:
+        # X: (N, 6, 128) -> (N * repeat, 6, 128)
+        X = np.tile(X, (repeat_count, 1, 1))
+        # y: (N, 1) -> (N * repeat, 1)
+        y = np.tile(y, (repeat_count, 1))
+        
+        print(f"Data repeated {repeat_count} times. New shape: X={X.shape}, y={y.shape}")
 
     return X, y
 
@@ -182,7 +188,7 @@ def online_learning_classifier(F_init, C_init, X_data, y_data,
                 
                 # 学習率 (Learning Rate)
                 # ※ RLSと異なり、適切な固定値 (0.01など) や減衰する値を設定する必要があります
-                learning_rate = 0.005 
+                learning_rate = 0.002 
 
                 # 重みの更新: W += learning_rate * error * input^T
                 # ここでは input が rO になります
@@ -198,26 +204,23 @@ def online_learning_classifier(F_init, C_init, X_data, y_data,
     # 戻り値に W_out (学習済み分類器) と accuracy_history を追加
     return spike_times, spike_neurons, F, C, W_out, accuracy_history, final_states
 
-def plot_learning_curve(acc_hist, window_size=50):
+def plot_learning_curve(acc_hist, window_size=50, save_dir="results"):
     """
     acc_hist: 学習関数から返ってきた accuracy_history リスト
     window_size: 移動平均を取る幅（デフォルト50サンプル）
+    save_dir: 画像の保存先ディレクトリ (デフォルト: "results")
     """
 
-    # 保存先設定
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(suggestGaussian_exp)")
-    base_save_dir = Path("results")
-    current_save_dir = base_save_dir / timestamp
-    current_save_dir.mkdir(parents=True, exist_ok=True)
+    # 保存先ディレクトリの設定 (Pathオブジェクト化)
+    save_path = Path(save_dir)
+    save_path.mkdir(parents=True, exist_ok=True) # フォルダが存在しない場合は作成
 
     plt.figure(figsize=(12, 6))
     
     # 1. 生の正解率（薄く表示）
-    # サンプルごとの変動が激しいので透明度(alpha)を下げて背景にします
     plt.plot(acc_hist, alpha=0.3, color='gray', label='Raw Accuracy (Per Sample)')
     
     # 2. 移動平均（濃く表示）
-    # 全体的な学習の傾向（トレンド）を見ます
     if len(acc_hist) >= window_size:
         weights = np.ones(window_size) / window_size
         moving_avg = np.convolve(acc_hist, weights, mode='valid')
@@ -230,14 +233,16 @@ def plot_learning_curve(acc_hist, window_size=50):
     plt.title('Online Learning Classification Accuracy', fontsize=16)
     plt.xlabel('Number of Samples', fontsize=14)
     plt.ylabel('Accuracy', fontsize=14)
-    plt.ylim(-0.05, 1.05) # Y軸を 0~1 に固定（少し余裕を持たせる）
+    plt.ylim(-0.05, 1.05) # Y軸を 0~1 に固定
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.legend(fontsize=12)
     plt.tight_layout()
-    plt.savefig(current_save_dir / "Final_Decoding_Error.png")
+    
+    # ファイル名を変更して保存 (learning_curve.png)
+    plt.savefig(save_path / "learning_curve.png")
 
 def plot_raster(spike_times, spike_neurons, title="Spike Raster Plot", 
-                figsize=(12, 6), marker_size=2, color='black'):
+                figsize=(12, 6), marker_size=2, color='black', save_dir="results"):
     """
     SNNのスパイク履歴をラスタープロットとして描画する関数
     
@@ -248,12 +253,12 @@ def plot_raster(spike_times, spike_neurons, title="Spike Raster Plot",
     - figsize: tuple, グラフのサイズ (幅, 高さ)
     - marker_size: float, プロットする点のサイズ
     - color: str, 点の色
-    - save_path: str, 画像を保存するパス (Noneの場合は表示のみ)
+    - save_dir: str, 画像を保存するディレクトリ (デフォルト: "results")
     """
     
     plt.figure(figsize=figsize)
     
-    # 散布図の描画 (s=サイズ, alpha=透明度)
+    # 散布図の描画
     plt.scatter(spike_times, spike_neurons, s=marker_size, c=color, alpha=0.6)
     
     # ラベルとタイトルの設定
@@ -261,11 +266,13 @@ def plot_raster(spike_times, spike_neurons, title="Spike Raster Plot",
     plt.ylabel("Neuron Index")
     plt.title(title)
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(suggestGaussian_exp)")
-    base_save_dir = Path("results")
-    current_save_dir = base_save_dir / timestamp
-    current_save_dir.mkdir(parents=True, exist_ok=True)
+    # 保存先ディレクトリの設定
+    save_path = Path(save_dir)
+    save_path.mkdir(parents=True, exist_ok=True)
+
     # グリッドとレイアウトの調整
     plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
     plt.tight_layout()
-    plt.savefig(current_save_dir / "Final_Decoding_Error.png")
+    
+    # ファイル名を変更して保存 (raster_plot.png)
+    plt.savefig(save_path / "raster_plot.png")
