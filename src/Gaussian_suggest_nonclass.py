@@ -41,7 +41,7 @@ if __name__ == "__main__":
     X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=35,
                                       train_params={'mean': [5.0, 5.0], 'std': [1.0, 5.0]},
                                       test_params={'mean': [-5.0, -5.0], 'std': [5.0, 1.0]})
-    
+
     X_train = X[:1000000]
     X_test = X[1000000:]
     # ---------------------------------------------------------
