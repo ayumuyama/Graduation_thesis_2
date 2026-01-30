@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from matplotlib import pyplot as plt
 
 from app import aPotential as aPot
 
@@ -10,8 +11,8 @@ target_input = [0, 1]
 
 X = df.iloc[:, target_input].values  #入力の作成
 
-print(input.shape)
-print(type(input))
+print(X.shape)
+print(type(X))
 
 target_labels = [2]
 
@@ -35,9 +36,29 @@ mu = 0.02 / 0.9
 F_initial, C_initial, W_out_initial, b_out_initial = aPot.init_weights(Nx, Nneuron, Nclasses)
 
 #学習の開始
-spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = aPot.test_train_continuous_nonclass(
-                          F_initial, C_initial, X, labels,
-                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=100,
-                          epsr=0.001, epsf=0.0001, init_states=None)
+spk_t_1, spk_i_1, F_learned, C_learned, W_learned, b_learned, mem_var, acc_hist, final_st = aPot.test_train_continuous_nonclass(
+                        F_initial, C_initial, X, labels,
+                        Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                        alpha, beta, mu, retrain=True, Gain=80,
+                        epsr=0.05, epsf=0.005, 
+                        W_out_init=W_out_initial, b_out_init=b_out_initial,
+                        lr_out=0.00001, init_states=None)
 
+# プロット
+plt.figure(figsize=(10, 5))
+x_axis = np.arange(1, len(acc_hist) + 1) * 1000
+plt.plot(x_axis, acc_hist, marker='o', linestyle='-', label='Accuracy (MA)')
+   
+plt.title('Accuracy History (Moving Average window=1000)')
+plt.xlabel('Step')
+plt.ylabel('Accuracy')
+plt.grid(True)
+plt.ylim(0, 1.1)
+    
+    # ドリフト地点の表示
+plt.axvline(100000, color='r', linestyle='--', label='Drift Start (Step 5000)')
+    
+plt.legend()
+plt.tight_layout()
+plt.savefig('accuracy_history.png')
+plt.show()
