@@ -38,10 +38,9 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=35,
-                                      train_params={'mean': [5.0, 5.0], 'std': [1.0, 5.0]},
-                                      test_params={'mean': [-5.0, -5.0], 'std': [5.0, 1.0]})
-
+    X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=30,
+                                      train_params={'mean': [4.0, 4.0], 'std': [1.0, 1.0]},
+                                      test_params={'mean': [-4.0, -4.0], 'std': [1.0, 1.0]})
     X_train = X[:1000000]
     X_test = X[1000000:]
     # ---------------------------------------------------------
@@ -185,7 +184,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # ★新規追加: Plot 4: Evolution of Decoding Error
     # ---------------------------------------------------------
-    plt.figure(figsize=(10, 3))
+    plt.figure(figsize=(10, 6))
     
     plt.plot(time_axis_dec, full_dec_err, 'o-', color='black', label='Decoding Error', markersize=4)
     
@@ -198,7 +197,7 @@ if __name__ == "__main__":
     
     plt.tick_params(axis='both', labelsize=20)
 
-    plt.ylim(0.0, 0.5)
+    plt.ylim(0.0, 1.0)
     plt.grid(True, which="both", ls="-", alpha=0.5)
     
     plt.legend(fontsize=20, loc='upper left')
@@ -206,35 +205,50 @@ if __name__ == "__main__":
     plt.savefig(current_save_dir / "Final_Decoding_Error.png", bbox_inches='tight')
     plt.close()
 
-    # プロット
-# Trainデータのプロット
-plt.figure(figsize=(8, 8))
-# 全データ（X_train）を青い点(c='blue')でプロット
-plt.scatter(X_train[:, 0], X_train[:, 1], c='blue', alpha=0.5, label='Data Points')
-# 軌跡を描画
-plt.plot(X_train[:, 0], X_train[:, 1], c='gray', alpha=0.2, linewidth=1)
+# # Trainデータのプロット
+# plt.figure(figsize=(8, 8))
+# # 全データ（X_train）を青い点(c='blue')でプロット
+# plt.scatter(X_train[:, 0], X_train[:, 1], c='blue', alpha=0.5, label='Data Points')
+# # 軌跡を描画
+# plt.plot(X_train[:, 0], X_train[:, 1], c='gray', alpha=0.2, linewidth=1)
 
-plt.title("Smoothed Random Walk (Train)")
-plt.xlabel("Input Dimension 1")
-plt.ylabel("Input Dimension 2")
-plt.legend()
-plt.grid(True)
-plt.axis('equal')
-plt.savefig("smoothed_dataset_train.png")
-plt.close()
+# plt.title("Set 1 data")
+# plt.xlabel("Input Dimension 1")
+# plt.ylabel("Input Dimension 2")
+# plt.legend()
+# plt.grid(True)
+# plt.axis('equal')
+# plt.savefig("Set_1_data.png")
+# plt.close()
 
-# Testデータのプロット
-plt.figure(figsize=(8, 8))
-# 全データ（X_test）を青い点(c='blue')でプロット
-plt.scatter(X_test[:, 0], X_test[:, 1], c='blue', alpha=0.5, label='Data Points')
-# 軌跡を描画
-plt.plot(X_test[:, 0], X_test[:, 1], c='gray', alpha=0.2, linewidth=1)
+# # Testデータのプロット
+# plt.figure(figsize=(8, 8))
+# # 全データ（X_test）を青い点(c='blue')でプロット
+# plt.scatter(X_test[:, 0], X_test[:, 1], c='blue', alpha=0.5, label='Data Points')
+# # 軌跡を描画
+# plt.plot(X_test[:, 0], X_test[:, 1], c='gray', alpha=0.2, linewidth=1)
 
-plt.title("Smoothed Random Walk (Test)")
-plt.xlabel("Input Dimension 1")
-plt.ylabel("Input Dimension 2")
-plt.legend()
-plt.grid(True)
-plt.axis('equal')
-plt.savefig("smoothed_dataset_test.png")
-plt.close()
+# plt.title("Set 2 data")
+# plt.xlabel("Input Dimension 1")
+# plt.ylabel("Input Dimension 2")
+# plt.legend()
+# plt.grid(True)
+# plt.axis('equal')
+# plt.savefig("Set_2_data.png")
+# plt.close()
+
+# # Testデータのプロット
+# plt.figure(figsize=(8, 8))
+# # 全データ（X_test）を青い点(c='blue')でプロット
+# plt.scatter(X[:, 0], X[:, 1], c='blue', alpha=0.5, label='Data Points')
+# # 軌跡を描画
+# plt.plot(X[:, 0], X[:, 1], c='gray', alpha=0.2, linewidth=1)
+
+# plt.title("Total data")
+# plt.xlabel("Input Dimension 1")
+# plt.ylabel("Input Dimension 2")
+# plt.legend()
+# plt.grid(True)
+# plt.axis('equal')
+# plt.savefig("Total_data.png")
+# plt.close()

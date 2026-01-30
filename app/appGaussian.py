@@ -251,9 +251,6 @@ def test_train_continuous_nonclass(F_init, C_init, X_data,
             spike_neurons.append(k)
             
             if retrain:
-                if t < 100:
-                    print(f" Step {t}: epsf={epsf:.6f}, epsr={epsr:.6f}")
-
                 F[:, k] += epsf * (alpha * x - F[:, k])
                 C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
 
