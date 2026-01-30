@@ -99,7 +99,7 @@ def generate_potential_drift_data(
 
     return x, labels, phases, wells_phase1, wells_phase2
 
-def test_train_continuous_nonclass(F_init, C_init, X_data,
+def test_train_continuous_nonclass(F_init, C_init, X_data, labels,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
                           alpha, beta, mu, retrain, Gain=200,
                           epsr=0.05, epsf=0.005, init_states=None):
