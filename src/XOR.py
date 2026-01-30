@@ -31,20 +31,20 @@ mu = 0.02 / 0.9
 F_initial, C_initial, W_out_initial, b_out_initial = aPot.init_weights(Nx, Nneuron, Nclasses)
 
 #学習の開始
-spk_t_1, spk_i_1, F_learned, C_learned, W_learned, b_learned, mem_var, acc_hist, final_st = aPot.test_train_continuous_class(
+spk_t_1, spk_i_1, *_, acc_hist, final_st, de_err  = aPot.test_train_continuous_class(
                         F_initial, C_initial, X, labels,
                         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                        alpha, beta, mu, retrain=True, Gain=8,
+                        alpha, beta, mu, retrain=True, Gain=15,
                         epsr=0.001, epsf=0.0001, 
                         W_out_init=W_out_initial, b_out_init=b_out_initial,
-                        lr_out=0.00001, init_states=None)
+                        lr_out=0.00001, init_states=None, shift_step=500000)
 
-spk_t_2, spk_i_2, F_learned_2, C_learned_2, W_learned_2, b_learned_2, mem_var_2, acc_hist_2, final_st_2 = aPot.test_train_continuous_suggest_class(
+spk_t_2, spk_i_2, *_, acc_hist_2, final_st_2, de_err_2 = aPot.test_train_continuous_suggest_class(
                         F_initial, C_initial, X, labels,
                         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                        alpha, beta, mu, retrain=True, Gain=8,
-                        eps=0.0005, W_out_init=W_out_initial, b_out_init=b_out_initial,
-                        lr_out=0.00001, init_states=None)
+                        alpha, beta, mu, retrain=True, Gain=15,
+                        eps=0.001, W_out_init=W_out_initial, b_out_init=b_out_initial,
+                        lr_out=0.00001, init_states=None, shift_step=500000)
 # プロット
 plt.figure(figsize=(10, 5))
 x_axis = np.arange(1, len(acc_hist) + 1) * 1000
@@ -129,4 +129,51 @@ plt.axvline(drift_time, color='r', linestyle='--', label=f'Drift Start ({drift_t
 plt.legend(loc='upper right')
 plt.tight_layout()
 plt.savefig('raster_plot_2.png')
+plt.close()
+
+#再構成誤差
+plt.figure(figsize=(10, 6))
+eval_interval = 10000
+time_axis_dec = np.arange(len(de_err)) * dt * eval_interval
+    
+plt.plot(time_axis_dec, de_err, 'o-', color='black', label='Decoding Error', markersize=4)
+    
+# 境界線
+time_offset_sec = (len(X) * dt) / 2
+plt.axvline(x=time_offset_sec, color='red', linestyle='--', label='Domain Shift Point')
+
+plt.xlabel('Time (s)', fontsize=24)
+plt.ylabel('Decoding Error', fontsize=24)
+    
+plt.tick_params(axis='both', labelsize=20)
+
+plt.ylim(0.0, 1.0)
+plt.grid(True, which="both", ls="-", alpha=0.5)
+    
+plt.legend(fontsize=20, loc='upper left')
+
+plt.savefig("Final_Decoding_Error.png", bbox_inches='tight')
+plt.close()
+
+eval_interval = 10000
+time_axis_dec_2 = np.arange(len(de_err_2)) * dt * eval_interval
+plt.figure(figsize=(10, 6))
+    
+plt.plot(time_axis_dec_2, de_err_2, 'o-', color='black', label='Decoding Error', markersize=4)
+    
+# 境界線
+time_offset_sec = (len(X) * dt) / 2
+plt.axvline(x=time_offset_sec, color='red', linestyle='--', label='Domain Shift Point')
+
+plt.xlabel('Time (s)', fontsize=24)
+plt.ylabel('Decoding Error', fontsize=24)
+    
+plt.tick_params(axis='both', labelsize=20)
+
+plt.ylim(0.0, 1.0)
+plt.grid(True, which="both", ls="-", alpha=0.5)
+    
+plt.legend(fontsize=20, loc='upper left')
+
+plt.savefig("Final_Decoding_Error_2.png", bbox_inches='tight')
 plt.close()
