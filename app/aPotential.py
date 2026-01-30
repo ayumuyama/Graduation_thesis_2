@@ -110,7 +110,7 @@ def init_weights(Nx, Nneuron, Nclasses):
     b_out = np.zeros(Nclasses)
     return F, C, W_out, b_out
 
-def test_train_continuous_nonclass(F_init, C_init, X_data, Y_data, # Y_dataを追加
+def test_train_continuous_class(F_init, C_init, X_data, Y_data, # Y_dataを追加
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
                           alpha, beta, mu, retrain, Gain=200,
                           epsr=0.05, epsf=0.005, 
@@ -168,7 +168,7 @@ def test_train_continuous_nonclass(F_init, C_init, X_data, Y_data, # Y_dataを�
         if t < 10:
             print(raw_input)
         
-        noise = 0.03 * np.random.randn(Nneuron)
+        noise = 0.01 * np.random.randn(Nneuron)
         recurrent_input = 0
         if O == 1:
             recurrent_input = C[:, k]
@@ -238,67 +238,203 @@ def test_train_continuous_nonclass(F_init, C_init, X_data, Y_data, # Y_dataを�
     # 戻り値に W_out, b_out, accuracy_history を追加
     return spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, accuracy_history, final_states
 
-# # --- データ生成の実行 ---
-# if __name__ == "__main__":
-#     X, y, p, w1, w2 = generate_potential_drift_data(
-#         n_steps = 200000,
-#         dt = 0.1,
-#         noise_strength = 0.5,
-#         well_depth = 6.0,
-#         well_width = 3.0,
-#         shift_step = 100000,
-#         radius = 5.0,
-#         start_angle = 30,
-#         theta = 30 
-#     )
-
-#     # --- 可視化 ---
-# fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
-# # ※ figsizeを(14, 6)から(12, 6)程度に調整すると，余白が減りバランスが良くなります
-
-# # 色の設定: クラスごとに色分け
-# colors = {0: 'blue', 1: 'red'}
-# class_names = {0: 'Class 0 (Q1/Q3)', 1: 'Class 1 (Q2/Q4)'}
-
-# # プロット用ヘルパー関数
-# def plot_phase_data(ax, X_phase, y_phase, wells, title):
-#     # クラスごとに散布図を描画
-#     for lbl in [0, 1]:
-#         mask = y_phase == lbl
-#         ax.scatter(X_phase[mask, 0], X_phase[mask, 1], 
-#                    c=colors[lbl], alpha=0.4, label=class_names[lbl], s=15)
+def test_train_continuous_suggest_class(F_init, C_init, X_data, Y_data, # Y_dataを追加
+                          Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                          alpha, beta, mu, retrain, Gain=200,
+                          eps=0.05, 
+                          W_out_init=None, b_out_init=None, lr_out=0.01, # 線形学習器用の引数を追加
+                          init_states=None):
     
-#     # 井戸の中心を表示
-#     ax.scatter(wells[:, 0], wells[:, 1], c='black', marker='X', s=150, label='Potential Wells', zorder=5)
+    TotalTime = X_data.shape[0]
+    print(f"Phase : Continuous Training/Testing with Supervised Readout (Total Steps: {TotalTime})")
     
-#     # 軸と装飾
-#     ax.set_title(title, fontsize=14)
-#     ax.axhline(0, color='gray', linestyle='--', linewidth=1)
-#     ax.axvline(0, color='gray', linestyle='--', linewidth=1)
-#     ax.set_xlim(-6, 6)
-#     ax.set_ylim(-6, 6)
+    F = F_init.copy()
+    C = C_init.copy()
     
-#     # 【追加】アスペクト比を1:1（正方形）に固定
-#     ax.set_aspect('equal')
-#     # または ax.set_box_aspect(1) でも可
+    # 線形学習器の初期化
+    if W_out_init is None:
+        W_out = np.zeros((Nclasses, Nneuron))
+    else:
+        W_out = W_out_init.copy()
+        
+    if b_out_init is None:
+        b_out = np.zeros(Nclasses)
+    else:
+        b_out = b_out_init.copy()
     
-#     ax.grid(True, alpha=0.3)
-#     ax.legend(loc='upper right')
+    if init_states is None:
+        V = np.zeros(Nneuron)
+        rO = np.zeros(Nneuron)
+        x = np.zeros(Nx)
+    else:
+        V = init_states['V'].copy()
+        rO = init_states['rO'].copy()
+        x = init_states['x'].copy()
 
-# # Phase 1 (Shift前) のプロット
-# mask_p1 = p == 0
-# plot_phase_data(axes[0], X[mask_p1], y[mask_p1], w1, "Phase 1: Before Shift")
+    Id = np.eye(Nneuron)
+    O = 0
+    k = 0
 
-# # Phase 2 (Shift後) のプロット
-# mask_p2 = p == 1
-# plot_phase_data(axes[1], X[mask_p2], y[mask_p2], w2, "Phase 2: After Covariate Shift")
+    spike_times = []
+    spike_neurons = []
+    membrane_var_history = []
+    
+    # 分類精度記録用
+    accuracy_history = []
+    window_size = 10 # 移動平均用
+    prediction_history = [] # 正誤履歴 (1:正解, 0:不正解)
+    
+    for t in range(TotalTime):
+        if t % 1000 == 0:
+            acc = np.mean(prediction_history[-window_size:]) if len(prediction_history) > 0 else 0
+            print(f'\r  Step: {t}/{TotalTime} | Acc (last {window_size}): {acc:.4f}', end='')
+            accuracy_history.append(acc)
 
-# plt.suptitle("2D Time Series with Covariate Shift (XOR Labeling)", fontsize=16)
-# plt.tight_layout()
-# plt.savefig("apotential.png")
+        # --- 以下、通常の学習ループ ---
+        raw_input = X_data[t]
+        img = raw_input * Gain
+        if t < 10:
+            print(raw_input)
+        
+        noise = 0.01 * np.random.randn(Nneuron)
+        recurrent_input = 0
+        if O == 1:
+            recurrent_input = C[:, k]
 
-# # データ保存処理（変更なし）
-# df = pd.DataFrame(X, columns=['x1', 'x2'])
-# df['label'] = y
-# df['phase'] = p
-# df.to_csv('xor_shift_data.csv', index=False)
+        V = (1 - leak * dt) * V + dt * (F.T @ img) + recurrent_input + noise
+        x = (1 - leak * dt) * x + dt * img 
+        
+        # スパイク判定
+        thresh_noise = 0.01 * np.random.randn(Nneuron)
+        potentials = V - Thresh - thresh_noise
+        k_curr = np.argmax(potentials)
+
+        if potentials[k_curr] >= 0:
+            O = 1
+            k = k_curr
+            spike_times.append(t * dt)
+            spike_neurons.append(k)
+            
+            if retrain:
+                # F, C の学習則（変更なし）
+                # 1. 膜電位の分散の計算
+                current_var = np.var(V)
+                
+                # 2. 学習率の都度計算
+                # epsf = eps * np.var(V)
+                # epsr = 10 * epsf
+                epsf = eps * current_var
+                epsr = 10 * epsf
+
+                F[:, k] += epsf * (alpha * x - F[:, k])
+                C[:, k] -= epsr * (beta * (V + mu * rO) + C[:, k] + mu * Id[:, k])
+
+            rO[k] += 1.0
+
+        else:
+            O = 0
+
+        rO = (1 - leak * dt) * rO
+
+        # ---------------------------------------------------------
+        # 線形学習器 (Supervised Online Learning)
+        # ---------------------------------------------------------
+        # ターゲットの取得
+        if Y_data.ndim > 1:
+            label = int(Y_data[t, 0])
+            if t < 10:
+                print(label)
+        else:
+            label = int(Y_data[t])
+            
+        target_vec = np.zeros(Nclasses)
+        target_vec[label] = 1.0
+        
+        # 予測 (y = W_out * rO + b)
+        # rOはローパスフィルタされたスパイク列なので、これを入出力に使うのが標準的
+        pred_vec = np.dot(W_out, rO) + b_out
+        
+        # 誤差計算 (LMS / Delta Rule)
+        error = target_vec - pred_vec
+        
+        # 重み更新: W += lr * error * input.T
+        # inputは rO
+        W_out += lr_out * np.outer(error, rO)
+        b_out += lr_out * error
+        
+        # 精度評価
+        pred_label = np.argmax(pred_vec)
+        is_correct = 1 if pred_label == label else 0
+        prediction_history.append(is_correct)
+        
+        membrane_var_history.append(np.var(V))
+    
+    final_states = {'V': V, 'rO': rO, 'x': x}
+
+    # 戻り値に W_out, b_out, accuracy_history を追加
+    return spike_times, spike_neurons, F, C, W_out, b_out, membrane_var_history, accuracy_history, final_states
+
+# --- データ生成の実行 ---
+if __name__ == "__main__":
+    X, y, p, w1, w2 = generate_potential_drift_data(
+    n_steps=400000,
+    dt=0.1,
+    noise_strength=0.5,  # 0.8 -> 1.5 (ノイズを増やして分布を広げる)
+    well_depth=7.0,
+    well_width=2.5,
+    shift_step=200000,
+    radius=4.0,          # 4.0 -> 2.0 (原点に近づけ、回転で境界を越えやすくする)
+    start_angle=30,      # 初期配置
+    theta=30             # 30 -> 50 (回転角を大きくして環境変化を大きくする)
+    )
+
+    # --- 可視化 ---
+fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
+# ※ figsizeを(14, 6)から(12, 6)程度に調整すると，余白が減りバランスが良くなります
+
+# 色の設定: クラスごとに色分け
+colors = {0: 'blue', 1: 'red'}
+class_names = {0: 'Class 0 (Q1/Q3)', 1: 'Class 1 (Q2/Q4)'}
+
+# プロット用ヘルパー関数
+def plot_phase_data(ax, X_phase, y_phase, wells, title):
+    # クラスごとに散布図を描画
+    for lbl in [0, 1]:
+        mask = y_phase == lbl
+        ax.scatter(X_phase[mask, 0], X_phase[mask, 1], 
+                   c=colors[lbl], alpha=0.4, label=class_names[lbl], s=15)
+    
+    # 井戸の中心を表示
+    ax.scatter(wells[:, 0], wells[:, 1], c='black', marker='X', s=150, label='Potential Wells', zorder=5)
+    
+    # 軸と装飾
+    ax.set_title(title, fontsize=14)
+    ax.axhline(0, color='gray', linestyle='--', linewidth=1)
+    ax.axvline(0, color='gray', linestyle='--', linewidth=1)
+    ax.set_xlim(-6, 6)
+    ax.set_ylim(-6, 6)
+    
+    # 【追加】アスペクト比を1:1（正方形）に固定
+    ax.set_aspect('equal')
+    # または ax.set_box_aspect(1) でも可
+    
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='upper right')
+
+# Phase 1 (Shift前) のプロット
+mask_p1 = p == 0
+plot_phase_data(axes[0], X[mask_p1], y[mask_p1], w1, "Phase 1: Before Shift")
+
+# Phase 2 (Shift後) のプロット
+mask_p2 = p == 1
+plot_phase_data(axes[1], X[mask_p2], y[mask_p2], w2, "Phase 2: After Covariate Shift")
+
+plt.suptitle("2D Time Series with Covariate Shift (XOR Labeling)", fontsize=16)
+plt.tight_layout()
+plt.savefig("apotential.png")
+
+# データ保存処理（変更なし）
+df = pd.DataFrame(X, columns=['x1', 'x2'])
+df['label'] = y
+df['phase'] = p
+df.to_csv('xor_shift_data.csv', index=False)
