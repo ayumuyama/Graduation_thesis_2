@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from pathlib import Path
 from datetime import datetime
+from scipy.optimize import curve_fit
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app import appGaussian as appssian
@@ -39,8 +40,11 @@ if __name__ == "__main__":
     print("Preparing Data...")
 
     X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=30,
-                                      train_params={'mean': [0.0, 0.0], 'std': [5.0, 1.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [1.0, 5.0]})
+                                      train_params={'mean': [-2.0, -2.0], 'std': [1.0, 1.0]},
+                                      test_params={'mean': [2.0, 2.0], 'std': [1.0, 1.0]})
+    
+    print(X.shape)
+    
 
     X_train = X[:1000000]
     X_test = X[1000000:]
@@ -54,7 +58,7 @@ if __name__ == "__main__":
     # 戻り値の最後に final_states_1 を受け取る
     nspk_t_1, nspk_i_1, nF_set1, nC_set1, nmem_var_1, nw_err_1, nd_err_1, nfinal_states_1 = appssian.test_train_continuous_correlated(F_initial, C_initial, X_train,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=100,
+                          alpha, beta, mu, retrain=True, Gain=50,
                           epsr=0.00005, epsf=0.000005, 
                           la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
                           init_states=None)
@@ -68,9 +72,9 @@ if __name__ == "__main__":
     spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = appssian.test_train_continuous_correlated_proposed(
         F_initial, C_initial, X_train,
         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-        alpha, beta, mu, retrain=True, Gain=100,
+        alpha, beta, mu, retrain=True, Gain=50,
         la=0.2, Ucc_scale=2.0,
-        eps=0.00002, init_states=None)
+        eps=0.00003, init_states=None)
     
     # ---------------------------------------------------------
     # Set 2: Learning(non)
@@ -81,7 +85,7 @@ if __name__ == "__main__":
     nspk_t_2, nspk_i_2, nF_set2, nC_set2, nmem_var_2, nw_err_2, nd_err_2, nfinal_states_2 = appssian.test_train_continuous_correlated(
                           nF_set1, nC_set1, X_test,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=100,
+                          alpha, beta, mu, retrain=True, Gain=50,
                           epsr=0.00005, epsf=0.000005,
                           la=0.2, Ucc_scale=2.0,
                           init_states=nfinal_states_1)
@@ -95,9 +99,9 @@ if __name__ == "__main__":
     spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, w_err_2, d_err_2, final_states_2 = appssian.test_train_continuous_correlated_proposed(
         F_set1, C_set1, X_test,
         Nneuron, Nx, Nclasses, dt, leak, Thresh,
-        alpha, beta, mu, retrain=True, Gain=100,
+        alpha, beta, mu, retrain=True, Gain=50,
         la=0.2, Ucc_scale=2.0,
-        eps=0.00002, init_states=final_states_1
+        eps=0.00003, init_states=final_states_1
     )
 
     # ---------------------------------------------------------
@@ -366,6 +370,103 @@ if __name__ == "__main__":
     plt.close()
     ##---------------------------------------------------------------------------------------------------------------
 
+    # ---------------------------------------------------------
+    # ★新規追加: Plot 5: Combined Decoding Error with Exponential Fit
+    # ---------------------------------------------------------
+    print("Generating Combined Decoding Error Plot with Fitting...")
+
+    # フィッティング関数の定義: y = a * exp(-lambda * (t - t0)) + b
+    def exponential_decay_func(t, a, b, lam, t0):
+        # t0はフィッティング開始時刻
+        return a * np.exp(-lam * (t - t0)) + b
+
+    # データ準備 (リストの場合があるのでNumPy配列化)
+    # Proposed (学習あり)
+    dec_err_proposed = np.array(full_dec_err)
+    time_proposed = time_axis_dec
+    
+    # Standard (学習なし/Non)
+    dec_err_non = np.array(nfull_dec_err)
+    time_non = ntime_axis_dec
+
+    # ドメインシフトの時刻 (Set 1の終了時刻)
+    t_shift = 1000.0  # 1,000,000 steps * 0.001 dt
+
+    # プロット作成
+    plt.figure(figsize=(12, 7))
+
+    # --- 1. Proposed (学習あり) の描画とフィッティング ---
+    # 元データのプロット
+    plt.plot(time_proposed, dec_err_proposed, 'o-', color='black', label='Proposed (Learning)', markersize=3, alpha=0.5)
+
+    # フィッティング (t >= t_shift のデータのみ使用)
+    mask_proposed = time_proposed >= t_shift
+    if np.any(mask_proposed):
+        t_fit_p = time_proposed[mask_proposed]
+        y_fit_p = dec_err_proposed[mask_proposed]
+        
+        # 初期値の推定 [振幅a, オフセットb, 減衰係数lambda, 開始時刻t0]
+        # lambdaの初期値は適当な正の値(例: 0.01)を設定
+        p0 = [np.max(y_fit_p) - np.min(y_fit_p), np.min(y_fit_p), 0.01, t_shift]
+        
+        try:
+            # t0は固定するため、lambda関数でラップするか、引数を工夫する
+            # ここでは t0 を固定パラメータとして関数に埋め込む形で最適化します
+            popt_p, pcov_p = curve_fit(lambda t, a, b, lam: exponential_decay_func(t, a, b, lam, t_shift), 
+                                       t_fit_p, y_fit_p, p0=p0[:3], maxfev=10000)
+            
+            a_p, b_p, lam_p = popt_p
+            
+            # フィッティング曲線の描画
+            y_fit_curve_p = exponential_decay_func(t_fit_p, a_p, b_p, lam_p, t_shift)
+            plt.plot(t_fit_p, y_fit_curve_p, '--', color='orange', linewidth=2.5, 
+                     label=f'Fit Proposed ($\lambda={lam_p:.4f}$)')
+            print(f"Proposed Lambda: {lam_p}")
+        except Exception as e:
+            print(f"Fitting failed for Proposed: {e}")
+
+    # --- 2. Standard (学習なし) の描画とフィッティング ---
+    # 元データのプロット
+    plt.plot(time_non, dec_err_non, 'o-', color='blue', label='Standard (Non-Learning)', markersize=3, alpha=0.5)
+
+    # フィッティング
+    mask_non = time_non >= t_shift
+    if np.any(mask_non):
+        t_fit_n = time_non[mask_non]
+        y_fit_n = dec_err_non[mask_non]
+        
+        p0 = [np.max(y_fit_n) - np.min(y_fit_n), np.min(y_fit_n), 0.01, t_shift]
+        
+        try:
+            popt_n, pcov_n = curve_fit(lambda t, a, b, lam: exponential_decay_func(t, a, b, lam, t_shift), 
+                                       t_fit_n, y_fit_n, p0=p0[:3], maxfev=10000)
+            a_n, b_n, lam_n = popt_n
+            
+            # フィッティング曲線の描画
+            y_fit_curve_n = exponential_decay_func(t_fit_n, a_n, b_n, lam_n, t_shift)
+            plt.plot(t_fit_n, y_fit_curve_n, '--', color='cyan', linewidth=2.5, 
+                     label=f'Fit Standard ($\lambda={lam_n:.4f}$)')
+            print(f"Standard Lambda: {lam_n}")
+        except Exception as e:
+            print(f"Fitting failed for Standard: {e}")
+
+    # --- グラフの装飾 ---
+    plt.axvline(x=t_shift, color='red', linestyle='--', label='Covariate Shift Point (t=1000)')
+    
+    plt.xlabel('Time (s)', fontsize=16)
+    plt.ylabel('Decoding Error', fontsize=16)
+    plt.title('Comparison of Decoding Error Convergence & Decay Rate', fontsize=18)
+    
+    plt.tick_params(axis='both', labelsize=14)
+    plt.legend(fontsize=12, loc='upper right')
+    plt.grid(True, which="both", ls="-", alpha=0.5)
+    plt.ylim(0.0, 0.2) # 必要に応じて範囲を調整してください
+
+    save_path = current_save_dir / "Final_Decoding_Error_Combined_Fit.png"
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    print(f"Combined fit plot saved to: {save_path}")
+
 # Trainデータのプロット
 plt.figure(figsize=(8, 8))
 # Trainデータ（X_train）を青い点(c='blue')でプロット
@@ -379,7 +480,10 @@ plt.ylabel("Input Dimension 2")
 plt.legend()
 plt.grid(True)
 plt.axis('equal')
-plt.savefig("Set_1_data.png")
+plt.xlim(-7.0, 7.0) 
+plt.ylim(-7.0, 7.0) 
+save_path = current_save_dir / "Set_1_data.png"
+plt.savefig(save_path)
 plt.close()
 
 # Testデータのプロット
@@ -395,7 +499,10 @@ plt.ylabel("Input Dimension 2")
 plt.legend()
 plt.grid(True)
 plt.axis('equal')
-plt.savefig("Set_2_data.png")
+plt.xlim(-7.0, 7.0) 
+plt.ylim(-7.0, 7.0) 
+save_path = current_save_dir / "Set_2_data.png"
+plt.savefig(save_path)
 plt.close()
 
 # Totalデータのプロット
@@ -413,5 +520,8 @@ plt.ylabel("Input Dimension 2")
 plt.legend()
 plt.grid(True)
 plt.axis('equal')
-plt.savefig("Total_data.png")
+plt.xlim(-7.0, 7.0) 
+plt.ylim(-7.0, 7.0) 
+save_path = current_save_dir / "Total_data.png"
+plt.savefig(save_path)
 plt.close()
