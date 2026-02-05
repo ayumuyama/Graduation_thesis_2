@@ -14,7 +14,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # 設定
     # ---------------------------------------------------------
-    Nneuron = 1000   
+    Nneuron = 800   
     Nx = 784
     Nclasses = 10        
     
@@ -27,9 +27,9 @@ if __name__ == "__main__":
     
     Thresh = 0.5
 
-    Duration = 100
+    Duration = 50
 
-    lr_readout=0.0002
+    lr_readout=0.0005
     
     # 保存先設定
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S(suggestGaussian_exp)")
@@ -39,32 +39,29 @@ if __name__ == "__main__":
     
     print(f"Results will be saved in: {current_save_dir}")
     
-    # ---------------------------------------------------------
+    # ---------------------------------------------------------                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
     # データ準備
     # ---------------------------------------------------------
     print("Preparing Data...")
 
-    X_train, y_train = appNIST.load_and_preprocess("identity_test_images.npy", "identity_test_labels.npy")
-    X_test, y_test = appNIST.load_and_preprocess("shotnoise_test_images.npy", "shotnoise_test_labels.npy")
+    # まず元のデータを読み込む
+    X_train_org, y_train_org = appNIST.load_and_preprocess("identity_test_images.npy", "identity_test_labels.npy")
+    X_test_org, y_test_org = appNIST.load_and_preprocess("motionblur_test_images.npy", "motionblur_test_labels.npy")
 
-    print(f"Set 1 shape: {X_train[0]}") 
-    print(f"Set 2 shape: {y_test.shape}")
+    # --- 修正箇所: Duration分だけデータを引き延ばす ---
+    # axis=0 (サンプル方向) に Duration 回繰り返す
+    X_train = np.repeat(X_train_org, Duration, axis=0)
+    y_train = np.repeat(y_train_org, Duration, axis=0)
+    
+    X_test = np.repeat(X_test_org, Duration, axis=0)
+    y_test = np.repeat(y_test_org, Duration, axis=0)
+    # --------------------------------------------------
     # ---------------------------------------------------------
     # Set 1: Learning(non)
     # ---------------------------------------------------------
     print("--- Phase 1: Learning on Set 1 ---")
     F_initial, C_initial, *_ = appssian.init_weights(Nx, Nneuron, Nclasses)
 
-    # 戻り値の最後に final_states_1 を受け取る
-    nspk_t_1, nspk_i_1, nF_set1, nC_set1, nmem_var_1, nacc_his_1, nfinal_states_1, nW_1 = appNIST.test_train_continuous_correlated(
-                        F_initial, C_initial, X_train, y_train,
-                        Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                        alpha, beta, mu, retrain=True, Gain=10,
-                        epsr=0.00005, epsf=0.000005, 
-                        la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
-                        init_states=None,
-                        lr_readout=0.002)
-    
     # ---------------------------------------------------------
     # Set 1: Learning
     # ---------------------------------------------------------
@@ -74,11 +71,37 @@ if __name__ == "__main__":
     spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, acc_his_1, final_states_1, W_1 = appNIST.test_train_continuous_correlated_proposed(
                         F_initial, C_initial, X_train, y_train, # y_dataを追加
                         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                        alpha, beta, mu, retrain=True, Gain=10,
-                        eps=0.00003, 
+                        alpha, beta, mu, retrain=True, Gain=30,
+                        eps=0.00001, 
                         la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
                         init_states=None,
-                        lr_readout=0.002)
+                        lr_readout=lr_readout, stim_duration=Duration)
+
+    # 戻り値の最後に final_states_1 を受け取る
+    nspk_t_1, nspk_i_1, nF_set1, nC_set1, nmem_var_1, nacc_his_1, nfinal_states_1, nW_1 = appNIST.test_train_continuous_correlated(
+                        F_initial, C_initial, X_train, y_train,
+                        Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                        alpha, beta, mu, retrain=True, Gain=30,
+                        epsr=0.00005, epsf=0.000005, 
+                        la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
+                        init_states=None,
+                        lr_readout=lr_readout, stim_duration=Duration)
+    
+     # ---------------------------------------------------------
+    # Set 2: Learning
+    # ---------------------------------------------------------
+    print("--- Phase 2: Learning on Set 2 ---")
+
+    # 状態の引き継ぎ忘れないように注意
+    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, acc_his_2, final_states_2, W_2 = appNIST.test_train_continuous_correlated_proposed(
+                        F_set1, C_set1, X_test, y_test, # y_dataを追加
+                        Nneuron, Nx, Nclasses, dt, leak, Thresh, 
+                        alpha, beta, mu, retrain=True, Gain=30,
+                        eps=0.00001, 
+                        la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
+                        init_states=final_states_1,
+                        lr_readout=lr_readout, stim_duration=Duration)
+    
     
     # ---------------------------------------------------------
     # Set 2: Learning(non)
@@ -89,26 +112,13 @@ if __name__ == "__main__":
     nspk_t_2, nspk_i_2, nF_set2, nC_set2, nmem_var_2, nacc_his_2, nfinal_states_2, nW_2 = appNIST.test_train_continuous_correlated(
                         nF_set1, nC_set1, X_test, y_test,
                         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                        alpha, beta, mu, retrain=True, Gain=10,
+                        alpha, beta, mu, retrain=True, Gain=30,
                         epsr=0.00005, epsf=0.000005, 
                         la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
                         init_states=nfinal_states_1,
-                        lr_readout=0.002)
+                        lr_readout=lr_readout, stim_duration=Duration)
     
-    # ---------------------------------------------------------
-    # Set 2: Learning
-    # ---------------------------------------------------------
-    print("--- Phase 2: Learning on Set 2 ---")
-
-    # 状態の引き継ぎ忘れないように注意
-    spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, acc_his_2, final_states_2, W_2 = appNIST.test_train_continuous_correlated_proposed(
-                        F_set1, C_set1, X_test, y_test, # y_dataを追加
-                        Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                        alpha, beta, mu, retrain=True, Gain=10,
-                        eps=0.00003, 
-                        la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
-                        init_states=final_states_1,
-                        lr_readout=0.002)
+   
 
     # ---------------------------------------------------------
     # Data Combination
@@ -162,7 +172,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     
     # 移動平均
-    mem_window_size = 1000
+    mem_window_size = 500
     if len(full_mem_var) >= mem_window_size:
         b = np.ones(mem_window_size) / mem_window_size
         full_mem_smooth = np.convolve(full_mem_var, b, mode='valid')
@@ -175,11 +185,11 @@ if __name__ == "__main__":
     else:
         plt.plot(full_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(X_train), color='red', linestyle='--', label='End of Set 1')
+    plt.axvline(x=len(X_train), color='red', linestyle='--', label='Covariate Shift Point')
     
     plt.xlabel('Input Samples')
-    plt.ylabel('Voltage Variance per Neuron')
-    plt.title('Evolution of the Variance of the Membrane Potential')
+    plt.ylabel('Voltage Variance')
+    
     plt.grid(True)
     plt.legend()
     
@@ -187,7 +197,7 @@ if __name__ == "__main__":
     plt.yscale('log') 
     
     mem_plot_path = current_save_dir / "Final_Voltage_Variance.png"
-    plt.savefig(mem_plot_path)
+    plt.savefig(mem_plot_path, bbox_inches='tight')
     plt.close()
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
 
@@ -245,7 +255,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     
     # 移動平均
-    nmem_window_size = 1000
+    nmem_window_size = 500
     if len(nfull_mem_var) >= nmem_window_size:
         nb = np.ones(nmem_window_size) / nmem_window_size
         nfull_mem_smooth = np.convolve(nfull_mem_var, nb, mode='valid')
@@ -258,11 +268,10 @@ if __name__ == "__main__":
     else:
         plt.plot(nfull_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(X_train), color='red', linestyle='--', label='End of Set 1')
+    plt.axvline(x=len(X_train), color='red', linestyle='--', label='Covariate Shift Point')
     
     plt.xlabel('Input Samples')
-    plt.ylabel('Voltage Variance per Neuron')
-    plt.title('Evolution of the Variance of the Membrane Potential')
+    plt.ylabel('Voltage Variance')
     plt.grid(True)
     plt.legend()
     
@@ -270,7 +279,88 @@ if __name__ == "__main__":
     plt.yscale('log') 
     
     mem_plot_path = current_save_dir / "Final_Voltage_Variance(non).png"
-    plt.savefig(mem_plot_path)
+    plt.savefig(mem_plot_path, bbox_inches='tight')
     plt.close()
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
     ##---------------------------------------------------------------------------------------------------------------
+
+    # =========================================================
+    # 追加: Accuracy Plots (精度グラフの作成) - Modified for Reset
+    # =========================================================
+    print("Plotting Accuracy History...")
+
+    acc_window = 300  # 移動平均のウィンドウサイズ
+
+    # ---------------------------------------------------------
+    # Plot 3: Accuracy History (Proposed / Learning)
+    # ---------------------------------------------------------
+    plt.figure(figsize=(10, 6))
+    
+    # --- Set 1 のプロット ---
+    if len(acc_his_1) >= acc_window:
+        window = np.ones(acc_window) / acc_window
+        acc_smooth_1 = np.convolve(acc_his_1, window, mode='valid')
+        # x軸: Set 1 の範囲
+        x_axis_1 = np.arange(acc_window - 1, len(acc_his_1))
+        plt.plot(x_axis_1, acc_smooth_1, label='Set 1', color='blue', linewidth=1.5)
+    else:
+        plt.plot(acc_his_1, label='Set 1 (Raw)', color='lightblue')
+
+    # --- Set 2 のプロット (リセットして計算) ---
+    if len(acc_his_2) >= acc_window:
+        window = np.ones(acc_window) / acc_window
+        acc_smooth_2 = np.convolve(acc_his_2, window, mode='valid')
+        # x軸: Set 2 の範囲 (Set 1 の長さをオフセットとして足す)
+        x_axis_2 = np.arange(acc_window - 1, len(acc_his_2)) + len(acc_his_1)
+        plt.plot(x_axis_2, acc_smooth_2, label='Set 2 ', color='darkblue', linewidth=1.5)
+    else:
+        x_axis_raw_2 = np.arange(len(acc_his_2)) + len(acc_his_1)
+        plt.plot(x_axis_raw_2, acc_his_2, label='Set 2', color='blue', alpha=0.5)
+
+    # 境界線
+    plt.axvline(x=len(acc_his_1), color='red', linestyle='--', label='Boundary')
+
+    plt.xlabel('Input Samples (Images)')
+    plt.ylabel('Accuracy (Moving Avg)')
+    plt.legend(loc='lower right')
+    plt.ylim(0.50, 1.05)
+    plt.grid(True, linestyle=':', alpha=0.6)
+    
+    acc_plot_path = current_save_dir / "Final_Accuracy.png"
+    plt.savefig(acc_plot_path, bbox_inches='tight')
+    plt.close()
+    print(f"Accuracy plot saved to: {acc_plot_path}")
+
+    # ---------------------------------------------------------
+    # Plot 4: Accuracy History (Non-Learning / Control)
+    # ---------------------------------------------------------
+    plt.figure(figsize=(10, 6))
+    
+    # --- Set 1 (Non) のプロット ---
+    if len(nacc_his_1) >= acc_window:
+        window = np.ones(acc_window) / acc_window
+        nacc_smooth_1 = np.convolve(nacc_his_1, window, mode='valid')
+        x_axis_n1 = np.arange(acc_window - 1, len(nacc_his_1))
+        plt.plot(x_axis_n1, nacc_smooth_1, label='Set 1', color='orange', linewidth=1.5)
+    
+    # --- Set 2 (Non) のプロット (リセットして計算) ---
+    if len(nacc_his_2) >= acc_window:
+        window = np.ones(acc_window) / acc_window
+        nacc_smooth_2 = np.convolve(nacc_his_2, window, mode='valid')
+        # x軸オフセット
+        x_axis_n2 = np.arange(acc_window - 1, len(nacc_his_2)) + len(nacc_his_1)
+        plt.plot(x_axis_n2, nacc_smooth_2, label='Set 2', color='darkorange', linewidth=1.5)
+
+    # 境界線
+    plt.axvline(x=len(nacc_his_1), color='red', linestyle='--', label='Boundary')
+
+    plt.xlabel('Input Samples (Images)')
+    plt.ylabel('Accuracy (Moving Avg)')
+    plt.legend(loc='lower right')
+    plt.ylim(0.40, 1.05)
+    plt.grid(True, linestyle=':', alpha=0.6)
+    
+    nacc_plot_path = current_save_dir / "Final_Accuracy(non).png"
+    plt.savefig(nacc_plot_path, bbox_inches='tight')
+    plt.close()
+    print(f"Accuracy plot (non) saved to: {nacc_plot_path}")

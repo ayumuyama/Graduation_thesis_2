@@ -40,8 +40,8 @@ if __name__ == "__main__":
     print("Preparing Data...")
 
     X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=30,
-                                      train_params={'mean': [-2.0, -2.0], 'std': [1.0, 1.0]},
-                                      test_params={'mean': [2.0, 2.0], 'std': [1.0, 1.0]})
+                                      train_params={'mean': [0.0, 0.0], 'std': [2.0, 2.0]},
+                                      test_params={'mean': [0.0, 0.0], 'std': [6.0, 6.0]})
     
     print(X.shape)
     
@@ -58,8 +58,8 @@ if __name__ == "__main__":
     # 戻り値の最後に final_states_1 を受け取る
     nspk_t_1, nspk_i_1, nF_set1, nC_set1, nmem_var_1, nw_err_1, nd_err_1, nfinal_states_1 = appssian.test_train_continuous_correlated(F_initial, C_initial, X_train,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=50,
-                          epsr=0.00005, epsf=0.000005, 
+                          alpha, beta, mu, retrain=True, Gain=80,
+                          epsr=0.00003, epsf=0.000003, 
                           la=0.2, Ucc_scale=2.0, # Figure 5用の追加パラメータ
                           init_states=None)
     
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     spk_t_1, spk_i_1, F_set1, C_set1, mem_var_1, w_err_1, d_err_1, final_states_1 = appssian.test_train_continuous_correlated_proposed(
         F_initial, C_initial, X_train,
         Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-        alpha, beta, mu, retrain=True, Gain=50,
+        alpha, beta, mu, retrain=True, Gain=80,
         la=0.2, Ucc_scale=2.0,
         eps=0.00003, init_states=None)
     
@@ -85,8 +85,8 @@ if __name__ == "__main__":
     nspk_t_2, nspk_i_2, nF_set2, nC_set2, nmem_var_2, nw_err_2, nd_err_2, nfinal_states_2 = appssian.test_train_continuous_correlated(
                           nF_set1, nC_set1, X_test,
                           Nneuron, Nx, Nclasses, dt, leak, Thresh, 
-                          alpha, beta, mu, retrain=True, Gain=50,
-                          epsr=0.00005, epsf=0.000005,
+                          alpha, beta, mu, retrain=True, Gain=80,
+                          epsr=0.00003, epsf=0.000003,
                           la=0.2, Ucc_scale=2.0,
                           init_states=nfinal_states_1)
     
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     spk_t_2, spk_i_2, F_set2, C_set2, mem_var_2, w_err_2, d_err_2, final_states_2 = appssian.test_train_continuous_correlated_proposed(
         F_set1, C_set1, X_test,
         Nneuron, Nx, Nclasses, dt, leak, Thresh,
-        alpha, beta, mu, retrain=True, Gain=50,
+        alpha, beta, mu, retrain=True, Gain=80,
         la=0.2, Ucc_scale=2.0,
         eps=0.00003, init_states=final_states_1
     )
@@ -173,44 +173,24 @@ if __name__ == "__main__":
     else:
         plt.plot(full_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(X_train), color='red', linestyle='--', label='End of Set 1')
+    plt.axvline(x=len(X_train), color='red', linestyle='--', label='Covariate Shift Point')
     
-    plt.xlabel('Input Samples')
-    plt.ylabel('Voltage Variance per Neuron')
-    plt.title('Evolution of the Variance of the Membrane Potential')
+    plt.xlabel('Input Samples', fontsize=22)
+    plt.ylabel('Voltage Variance', fontsize=22)
+    # 【追加】軸の数値（刻み目ラベル）のフォントサイズを大きくする
+    plt.tick_params(axis='both', which='major', labelsize=20)
     plt.grid(True)
-    plt.legend()
+    plt.legend(loc='lower left', fontsize=18, framealpha=0.8)
     
     # 対数スケール
     plt.yscale('log') 
+    plt.ylim(0.0005, 5)
     
     mem_plot_path = current_save_dir / "Final_Voltage_Variance.png"
-    plt.savefig(mem_plot_path)
+    plt.savefig(mem_plot_path, bbox_inches='tight')
     plt.close()
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
 
-    # ---------------------------------------------------------
-    # ★新規追加: Plot 3: Distance to Optimal Weights
-    # ---------------------------------------------------------
-    plt.figure(figsize=(10, 6))
-    plt.plot(time_axis_error, full_weight_error, color='purple', label='Distance to Optimal Weights')
-    
-    # Set 1 と Set 2 の境界線
-    end_time_set1 = len(w_err_1) * dt * record_interval_steps
-    plt.axvline(x=end_time_set1, color='red', linestyle='--', label='End of Set 1')
-
-    plt.xlabel('Time (s)')
-    plt.ylabel('Normalized Distance')
-    plt.title('Convergence to Optimal Recurrent Weights (E-I Balance)')
-    plt.yscale('log') # 対数
-    plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.legend()
-    
-
-    weight_plot_path = current_save_dir / "Final_Weight_Convergence.png"
-    plt.savefig(weight_plot_path)
-    plt.close()
-    print(f"Weight Convergence plot saved to: {weight_plot_path}")
 
     # ---------------------------------------------------------
     # ★新規追加: Plot 4: Evolution of Decoding Error
@@ -306,44 +286,24 @@ if __name__ == "__main__":
     else:
         plt.plot(nfull_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(X_train), color='red', linestyle='--', label='End of Set 1')
+    plt.axvline(x=len(X_train), color='red', linestyle='--', label='Covariate Shift Point')
     
-    plt.xlabel('Input Samples')
-    plt.ylabel('Voltage Variance per Neuron')
-    plt.title('Evolution of the Variance of the Membrane Potential')
+    plt.xlabel('Input Samples', fontsize=22)
+    plt.ylabel('Voltage Variance', fontsize=22)
+    # 【追加】軸の数値（刻み目ラベル）のフォントサイズを大きくする
+    plt.tick_params(axis='both', which='major', labelsize=20)
     plt.grid(True)
-    plt.legend()
-    
+   
+    plt.legend(loc='lower left', fontsize=18, framealpha=0.8)
     # 対数スケール
     plt.yscale('log') 
+    plt.ylim(0.0005, 5)
     
     mem_plot_path = current_save_dir / "Final_Voltage_Variance(non).png"
-    plt.savefig(mem_plot_path)
+    plt.savefig(mem_plot_path, bbox_inches='tight')
     plt.close()
     print(f"Voltage Variance plot saved to: {mem_plot_path}")
 
-    # ---------------------------------------------------------
-    # ★新規追加: Plot 3: Distance to Optimal Weights
-    # ---------------------------------------------------------
-    plt.figure(figsize=(10, 6))
-    plt.plot(ntime_axis_error, nfull_weight_error, color='purple', label='Distance to Optimal Weights')
-    
-    # Set 1 と Set 2 の境界線
-    nend_time_set1 = len(nw_err_1) * dt * nrecord_interval_steps
-    plt.axvline(x=nend_time_set1, color='red', linestyle='--', label='End of Set 1')
-
-    plt.xlabel('Time (s)')
-    plt.ylabel('Normalized Distance')
-    plt.title('Convergence to Optimal Recurrent Weights (E-I Balance)')
-    plt.yscale('log') # 対数
-    plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.legend()
-    
-
-    weight_plot_path = current_save_dir / "Final_Weight_Convergence(non).png"
-    plt.savefig(weight_plot_path)
-    plt.close()
-    print(f"Weight Convergence plot saved to: {weight_plot_path}")
 
     # ---------------------------------------------------------
     # ★新規追加: Plot 4: Evolution of Decoding Error
@@ -397,7 +357,7 @@ if __name__ == "__main__":
 
     # --- 1. Proposed (学習あり) の描画とフィッティング ---
     # 元データのプロット
-    plt.plot(time_proposed, dec_err_proposed, 'o-', color='black', label='Proposed (Learning)', markersize=3, alpha=0.5)
+    plt.plot(time_proposed, dec_err_proposed, 'o-', color='black', label='Proposed', markersize=3, alpha=0.5)
 
     # フィッティング (t >= t_shift のデータのみ使用)
     mask_proposed = time_proposed >= t_shift
@@ -427,7 +387,7 @@ if __name__ == "__main__":
 
     # --- 2. Standard (学習なし) の描画とフィッティング ---
     # 元データのプロット
-    plt.plot(time_non, dec_err_non, 'o-', color='blue', label='Standard (Non-Learning)', markersize=3, alpha=0.5)
+    plt.plot(time_non, dec_err_non, 'o-', color='blue', label='Standard', markersize=3, alpha=0.5)
 
     # フィッティング
     mask_non = time_non >= t_shift
@@ -455,7 +415,6 @@ if __name__ == "__main__":
     
     plt.xlabel('Time (s)', fontsize=16)
     plt.ylabel('Decoding Error', fontsize=16)
-    plt.title('Comparison of Decoding Error Convergence & Decay Rate', fontsize=18)
     
     plt.tick_params(axis='both', labelsize=14)
     plt.legend(fontsize=12, loc='upper right')
@@ -474,16 +433,15 @@ plt.scatter(X_train[:, 0], X_train[:, 1], c='blue', alpha=0.5, label='Train Data
 # 軌跡を描画
 plt.plot(X_train[:, 0], X_train[:, 1], c='gray', alpha=0.2, linewidth=1)
 
-plt.title("Set 1 data (Train)")
-plt.xlabel("Input Dimension 1")
-plt.ylabel("Input Dimension 2")
+plt.xlabel("Input Dimension 1", fontsize=20)
+plt.ylabel("Input Dimension 2", fontsize=20)
 plt.legend()
 plt.grid(True)
 plt.axis('equal')
 plt.xlim(-7.0, 7.0) 
 plt.ylim(-7.0, 7.0) 
 save_path = current_save_dir / "Set_1_data.png"
-plt.savefig(save_path)
+plt.savefig(save_path, bbox_inches='tight')
 plt.close()
 
 # Testデータのプロット
@@ -493,35 +451,13 @@ plt.scatter(X_test[:, 0], X_test[:, 1], c='red', alpha=0.5, label='Test Data')
 # 軌跡を描画
 plt.plot(X_test[:, 0], X_test[:, 1], c='gray', alpha=0.2, linewidth=1)
 
-plt.title("Set 2 data (Test)")
-plt.xlabel("Input Dimension 1")
-plt.ylabel("Input Dimension 2")
+plt.xlabel("Input Dimension 1", fontsize=20)
+plt.ylabel("Input Dimension 2", fontsize=20)
 plt.legend()
 plt.grid(True)
 plt.axis('equal')
 plt.xlim(-7.0, 7.0) 
 plt.ylim(-7.0, 7.0) 
 save_path = current_save_dir / "Set_2_data.png"
-plt.savefig(save_path)
-plt.close()
-
-# Totalデータのプロット
-plt.figure(figsize=(8, 8))
-# 全体の軌跡を描画（背景として先に描画）
-plt.plot(X[:, 0], X[:, 1], c='gray', alpha=0.2, linewidth=1)
-
-# Trainデータ（青）とTestデータ（赤）を重ねてプロット
-plt.scatter(X_train[:, 0], X_train[:, 1], c='blue', alpha=0.5, label='Train Data')
-plt.scatter(X_test[:, 0], X_test[:, 1], c='red', alpha=0.5, label='Test Data')
-
-plt.title("Total data")
-plt.xlabel("Input Dimension 1")
-plt.ylabel("Input Dimension 2")
-plt.legend()
-plt.grid(True)
-plt.axis('equal')
-plt.xlim(-7.0, 7.0) 
-plt.ylim(-7.0, 7.0) 
-save_path = current_save_dir / "Total_data.png"
-plt.savefig(save_path)
+plt.savefig(save_path, bbox_inches='tight')
 plt.close()
