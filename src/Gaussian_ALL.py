@@ -40,8 +40,8 @@ if __name__ == "__main__":
     print("Preparing Data...")
 
     X = appssian.generate_continuous_shift_dataset(n_train=1000000, n_test=1000000, nx=2, sigma=5, seed=30,
-                                      train_params={'mean': [0.0, 0.0], 'std': [2.0, 2.0]},
-                                      test_params={'mean': [0.0, 0.0], 'std': [6.0, 6.0]})
+                                      train_params={'mean': [0.0, 0.0], 'std': [5.0, 1.0]},
+                                      test_params={'mean': [0.0, 0.0], 'std': [1.0, 5.0]})
     
     print(X.shape)
     
@@ -155,29 +155,36 @@ if __name__ == "__main__":
     print(f"Raster plot saved to: {raster_plot_path}")
 
     # ---------------------------------------------------------
-    # Plot 2: Membrane Potential Variance (新規追加)
+    # Plot 2: Membrane Potential Variance (修正: 時間軸へ変更)
     # ---------------------------------------------------------
     plt.figure(figsize=(10, 6))
     
+    # ★追加: 時間軸の作成
+    time_axis_mem = np.arange(len(full_mem_var)) * dt
+
     # 移動平均
     mem_window_size = 1000
     if len(full_mem_var) >= mem_window_size:
         b = np.ones(mem_window_size) / mem_window_size
         full_mem_smooth = np.convolve(full_mem_var, b, mode='valid')
         
-        # 生データを薄くプロット
-        plt.plot(full_mem_var, label='Raw Variance', color='lightgreen', alpha=0.4)
-        # 移動平均を濃くプロット
-        plt.plot(np.arange(mem_window_size - 1, len(full_mem_var)), full_mem_smooth, 
+        # 生データを薄くプロット (横軸に time_axis_mem を指定)
+        plt.plot(time_axis_mem, full_mem_var, label='Raw Variance', color='lightgreen', alpha=0.4)
+        
+        # 移動平均を濃くプロット (横軸を対応する時間に合わせる)
+        # mode='valid' のため、データの開始位置が window_size-1 ずれます
+        plt.plot(time_axis_mem[mem_window_size - 1:], full_mem_smooth, 
                  label=f'Moving Average (window={mem_window_size})', color='green', linewidth=2)
     else:
-        plt.plot(full_mem_var, label='Voltage Variance', color='green')
+        plt.plot(time_axis_mem, full_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(X_train), color='red', linestyle='--', label='Covariate Shift Point')
+    # 境界線 (サンプル数 * dt)
+    plt.axvline(x=len(X_train) * dt, color='red', linestyle='--', label='Covariate Shift Point')
     
-    plt.xlabel('Input Samples', fontsize=22)
+    # ラベル変更
+    plt.xlabel('Time (s)', fontsize=22)  # ★変更
     plt.ylabel('Voltage Variance', fontsize=22)
-    # 【追加】軸の数値（刻み目ラベル）のフォントサイズを大きくする
+    
     plt.tick_params(axis='both', which='major', labelsize=20)
     plt.grid(True)
     plt.legend(loc='lower left', fontsize=18, framealpha=0.8)
@@ -268,32 +275,38 @@ if __name__ == "__main__":
     print(f"Raster plot saved to: {raster_plot_path}")
 
     # ---------------------------------------------------------
-    # Plot 2: Membrane Potential Variance (新規追加)
+    # Plot 2: Membrane Potential Variance (non) (修正: 時間軸へ変更)
     # ---------------------------------------------------------
     plt.figure(figsize=(10, 6))
     
+    # ★追加: 時間軸の作成
+    ntime_axis_mem = np.arange(len(nfull_mem_var)) * dt
+
     # 移動平均
     nmem_window_size = 1000
     if len(nfull_mem_var) >= nmem_window_size:
         nb = np.ones(nmem_window_size) / nmem_window_size
         nfull_mem_smooth = np.convolve(nfull_mem_var, nb, mode='valid')
         
-        # 生データを薄くプロット
-        plt.plot(nfull_mem_var, label='Raw Variance', color='lightgreen', alpha=0.4)
-        # 移動平均を濃くプロット
-        plt.plot(np.arange(nmem_window_size - 1, len(nfull_mem_var)), nfull_mem_smooth, 
+        # 生データを薄くプロット (横軸指定)
+        plt.plot(ntime_axis_mem, nfull_mem_var, label='Raw Variance', color='lightgreen', alpha=0.4)
+        
+        # 移動平均を濃くプロット (横軸指定)
+        plt.plot(ntime_axis_mem[nmem_window_size - 1:], nfull_mem_smooth, 
                  label=f'Moving Average (window={nmem_window_size})', color='green', linewidth=2)
     else:
-        plt.plot(nfull_mem_var, label='Voltage Variance', color='green')
+        plt.plot(ntime_axis_mem, nfull_mem_var, label='Voltage Variance', color='green')
 
-    plt.axvline(x=len(X_train), color='red', linestyle='--', label='Covariate Shift Point')
+    # 境界線
+    plt.axvline(x=len(X_train) * dt, color='red', linestyle='--', label='Covariate Shift Point')
     
-    plt.xlabel('Input Samples', fontsize=22)
+    # ラベル変更
+    plt.xlabel('Time (s)', fontsize=22)  # ★変更
     plt.ylabel('Voltage Variance', fontsize=22)
-    # 【追加】軸の数値（刻み目ラベル）のフォントサイズを大きくする
+    
     plt.tick_params(axis='both', which='major', labelsize=20)
     plt.grid(True)
-   
+    
     plt.legend(loc='lower left', fontsize=18, framealpha=0.8)
     # 対数スケール
     plt.yscale('log') 
@@ -345,7 +358,7 @@ if __name__ == "__main__":
     dec_err_proposed = np.array(full_dec_err)
     time_proposed = time_axis_dec
     
-    # Standard (学習なし/Non)
+    # Conventional (学習なし/Non)
     dec_err_non = np.array(nfull_dec_err)
     time_non = ntime_axis_dec
 
@@ -357,7 +370,7 @@ if __name__ == "__main__":
 
     # --- 1. Proposed (学習あり) の描画とフィッティング ---
     # 元データのプロット
-    plt.plot(time_proposed, dec_err_proposed, 'o-', color='black', label='Proposed', markersize=3, alpha=0.5)
+    plt.plot(time_proposed, dec_err_proposed, 'o-', color='blue', label='Proposed', markersize=3, alpha=0.5)
 
     # フィッティング (t >= t_shift のデータのみ使用)
     mask_proposed = time_proposed >= t_shift
@@ -385,9 +398,9 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Fitting failed for Proposed: {e}")
 
-    # --- 2. Standard (学習なし) の描画とフィッティング ---
+    # --- 2. Conventional (学習なし) の描画とフィッティング ---
     # 元データのプロット
-    plt.plot(time_non, dec_err_non, 'o-', color='blue', label='Standard', markersize=3, alpha=0.5)
+    plt.plot(time_non, dec_err_non, 'o-', color='black', label='Conventional', markersize=3, alpha=0.5)
 
     # フィッティング
     mask_non = time_non >= t_shift
@@ -405,10 +418,10 @@ if __name__ == "__main__":
             # フィッティング曲線の描画
             y_fit_curve_n = exponential_decay_func(t_fit_n, a_n, b_n, lam_n, t_shift)
             plt.plot(t_fit_n, y_fit_curve_n, '--', color='cyan', linewidth=2.5, 
-                     label=f'Fit Standard ($\lambda={lam_n:.4f}$)')
-            print(f"Standard Lambda: {lam_n}")
+                     label=f'Fit Conventional ($\lambda={lam_n:.4f}$)')
+            print(f"Conventional Lambda: {lam_n}")
         except Exception as e:
-            print(f"Fitting failed for Standard: {e}")
+            print(f"Fitting failed for Conventional: {e}")
 
     # --- グラフの装飾 ---
     plt.axvline(x=t_shift, color='red', linestyle='--', label='Covariate Shift Point (t=1000)')
@@ -418,7 +431,6 @@ if __name__ == "__main__":
     
     plt.tick_params(axis='both', labelsize=14)
     plt.legend(fontsize=12, loc='upper right')
-    plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.ylim(0.0, 0.2) # 必要に応じて範囲を調整してください
 
     save_path = current_save_dir / "Final_Decoding_Error_Combined_Fit.png"
@@ -435,7 +447,8 @@ plt.plot(X_train[:, 0], X_train[:, 1], c='gray', alpha=0.2, linewidth=1)
 
 plt.xlabel("Input Dimension 1", fontsize=20)
 plt.ylabel("Input Dimension 2", fontsize=20)
-plt.legend()
+plt.legend(fontsize=16, loc='upper right')
+plt.tick_params(axis='both', which='major', labelsize=20)
 plt.grid(True)
 plt.axis('equal')
 plt.xlim(-7.0, 7.0) 
@@ -453,7 +466,8 @@ plt.plot(X_test[:, 0], X_test[:, 1], c='gray', alpha=0.2, linewidth=1)
 
 plt.xlabel("Input Dimension 1", fontsize=20)
 plt.ylabel("Input Dimension 2", fontsize=20)
-plt.legend()
+plt.legend(fontsize=16, loc='upper right')
+plt.tick_params(axis='both', which='major', labelsize=20)
 plt.grid(True)
 plt.axis('equal')
 plt.xlim(-7.0, 7.0) 

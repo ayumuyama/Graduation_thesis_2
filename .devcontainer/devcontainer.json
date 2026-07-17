@@ -9,8 +9,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-python.python",        // ここにPython拡張機能を追加
-        "ms-python.vscode-pylance" // 高度な解析・補完機能（セットで入れるのが一般的です）
+        "ms-python.python",        
+        "ms-python.vscode-pylance" 
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python3"

@@ -11,3 +11,4 @@ services:
       # - ./results:/workspace/results
       # - ./app:/workspace/app
       - ./:/workspace
+      - C:/Users/ayumu/OneDrive/Lab_Results:/workspace/outputs

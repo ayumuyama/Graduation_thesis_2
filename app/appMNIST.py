@@ -16,14 +16,18 @@ def load_and_preprocess(image_file_name, label_file_name, data_dir="data", num_c
     images = np.load(image_path)
     labels = np.load(label_path)
 
-    # 1次元配列への変換と同時に，0.0-1.0に正規化
-    # astype(np.float32) を入れることで，精度の維持と計算の高速化を図ります
     X = images.reshape(images.shape[0], -1).astype(np.float32) / 255.0
+
+    # 各サンプル（画像）ごとに平均を計算して引く
+    # keepdims=True で計算することで、ブロードキャストが可能になります
+    sample_mean = np.mean(X, axis=1, keepdims=True)
+    X = X - sample_mean 
     
-    # ラベルのOne-hotエンコーディング
-    # こちらも後続の計算のために float32 にしておくのが一般的です
+    # 必要に応じて、さらに標準偏差で割る（Sample-wise Standardization）
+    sample_std = np.std(X, axis=1, keepdims=True) + 1e-7
+    X = X / sample_std
+
     y = np.eye(num_classes)[labels].astype(np.float32)
-    
     return X, y
 
 def test_train_continuous_correlated_proposed(F_init, C_init, X_data, y_data,
@@ -110,11 +114,13 @@ def test_train_continuous_correlated_proposed(F_init, C_init, X_data, y_data,
             k = k_curr
             spike_times.append(t * dt)
             spike_neurons.append(k)
+            #print("spike!")
             
             if retrain:
                 current_var = np.var(V)
                 current_epsf = eps * current_var
                 current_epsr = 10 * current_epsf
+                
                 
                 recon_term = Ucc_scale * Ucc[:, k]
                 F[:, k] += current_epsf * (x - recon_term)
