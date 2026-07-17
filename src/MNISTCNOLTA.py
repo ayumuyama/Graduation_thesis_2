@@ -116,6 +116,29 @@ if __name__ == "__main__":
                             init_states=nfinal_states_1,
                             lr_readout=lr_readout, stim_duration=Duration)
             
+            # === 区間平均精度の計算と出力 ===
+            # 各種ノイズなどの条件ごとにこの処理が呼ばれる箇所に配置します
+
+            # 評価区間のインデックス設定 (Pythonのインデックスに合わせて設定)
+            phase1_start = 10000
+            phase1_end = 12500
+            phase2_start = 12500
+            phase2_end = 20000
+
+            # 提案手法の区間平均
+            prop_phase1_mean = np.mean(acc_his_2[phase1_start:phase1_end])
+            prop_phase2_mean = np.mean(acc_his_2[phase2_start:phase2_end])
+
+            # 従来手法の区間平均
+            conv_phase1_mean = np.mean(nacc_his_2[phase1_start:phase1_end])
+            conv_phase2_mean = np.mean(nacc_his_2[phase2_start:phase2_end])
+
+            # 結果のコンソール出力
+            print("\n=== Covariate Shift 後の区間平均精度 ===")
+            print(f"初期適応フェーズ (10000 - 12500) | Proposed: {prop_phase1_mean:.3f} | Conventional: {conv_phase1_mean:.3f}")
+            print(f"定常・回復フェーズ (12500 - 20000) | Proposed: {prop_phase2_mean:.3f} | Conventional: {conv_phase2_mean:.3f}")
+            print("========================================\n")
+
             # =========================================================
             # プロット処理 (以前と同じロジックを統合)
             # =========================================================
@@ -181,14 +204,14 @@ if __name__ == "__main__":
             if len(nacc_his_1) >= acc_window:
                 nacc_smooth_1 = np.convolve(nacc_his_1, window, mode='valid')
                 x_axis_n1 = np.arange(acc_window - 1, len(nacc_his_1))
-                plt.plot(x_axis_n1, nacc_smooth_1, label=label_conventional, color='black', linewidth=1.0, alpha=0.6, linestyle='-')
+                plt.plot(x_axis_n1, nacc_smooth_1, label=label_conventional, color='gray', linewidth=0.8, alpha=0.7, linestyle='--')
                 all_plotted_data.extend(nacc_smooth_1)
                 label_conventional = None 
             
             if len(nacc_his_2) >= acc_window:
                 nacc_smooth_2 = np.convolve(nacc_his_2, window, mode='valid')
                 x_axis_n2 = np.arange(acc_window - 1, len(nacc_his_2)) + len(nacc_his_1)
-                plt.plot(x_axis_n2, nacc_smooth_2, label=label_conventional, color='black', linewidth=1.0, alpha=0.6, linestyle='-')
+                plt.plot(x_axis_n2, nacc_smooth_2, label=label_conventional, color='gray', linewidth=0.8, alpha=0.7, linestyle='--')
                 all_plotted_data.extend(nacc_smooth_2)
 
             # 提案手法 (青色) のプロット ※元のコードが赤線指定でしたがCombinedで青を使っていたので青に統一しています
@@ -196,22 +219,22 @@ if __name__ == "__main__":
             if len(acc_his_1) >= acc_window:
                 acc_smooth_1 = np.convolve(acc_his_1, window, mode='valid')
                 x_axis_1 = np.arange(acc_window - 1, len(acc_his_1))
-                plt.plot(x_axis_1, acc_smooth_1, label=label_proposed, color='blue', linewidth=1.0)
+                plt.plot(x_axis_1, acc_smooth_1, label=label_proposed, color='black', linewidth=1.0, alpha=1.0)
                 all_plotted_data.extend(acc_smooth_1)
                 label_proposed = None 
             else:
-                plt.plot(acc_his_1, label=label_proposed, color='blue', alpha=0.3)
+                plt.plot(acc_his_1, label=label_proposed, color='black', alpha=0.3)
                 all_plotted_data.extend(acc_his_1)
                 label_proposed = None
 
             if len(acc_his_2) >= acc_window:
                 acc_smooth_2 = np.convolve(acc_his_2, window, mode='valid')
                 x_axis_2 = np.arange(acc_window - 1, len(acc_his_2)) + len(acc_his_1)
-                plt.plot(x_axis_2, acc_smooth_2, label=label_proposed, color='blue', linewidth=1.0)
+                plt.plot(x_axis_2, acc_smooth_2, label=label_proposed, color='black', linewidth=1.0, alpha=1.0)
                 all_plotted_data.extend(acc_smooth_2)
             else:
                 x_axis_raw_2 = np.arange(len(acc_his_2)) + len(acc_his_1)
-                plt.plot(x_axis_raw_2, acc_his_2, label=label_proposed, color='blue', alpha=0.3)
+                plt.plot(x_axis_raw_2, acc_his_2, label=label_proposed, color='black', alpha=0.3)
                 all_plotted_data.extend(acc_his_2)
 
             plt.axvline(x=len(acc_his_1), color='red', linestyle=':', linewidth=1.5, label='Covariate Shift Point')
