@@ -370,7 +370,7 @@ if __name__ == "__main__":
 
     # --- 1. Proposed (学習あり) の描画とフィッティング ---
     # 元データのプロット
-    plt.plot(time_proposed, dec_err_proposed, 'o-', color='blue', label='Proposed', markersize=3, alpha=0.5)
+    plt.plot(time_proposed, dec_err_proposed, 'o-', color='black', label='Proposed', markersize=3, alpha=0.5)
 
     # フィッティング (t >= t_shift のデータのみ使用)
     mask_proposed = time_proposed >= t_shift
@@ -392,7 +392,7 @@ if __name__ == "__main__":
             
             # フィッティング曲線の描画
             y_fit_curve_p = exponential_decay_func(t_fit_p, a_p, b_p, lam_p, t_shift)
-            plt.plot(t_fit_p, y_fit_curve_p, '--', color='orange', linewidth=2.5, 
+            plt.plot(t_fit_p, y_fit_curve_p, color='red', linewidth=2.5, 
                      label=f'Fit Proposed ($\lambda={lam_p:.4f}$)')
             print(f"Proposed Lambda: {lam_p}")
         except Exception as e:
@@ -400,7 +400,7 @@ if __name__ == "__main__":
 
     # --- 2. Conventional (学習なし) の描画とフィッティング ---
     # 元データのプロット
-    plt.plot(time_non, dec_err_non, 'o-', color='black', label='Conventional', markersize=3, alpha=0.5)
+    plt.plot(time_non, dec_err_non, 'o-', linestyle='--', color='black', label='Conventional', markersize=3, alpha=0.5)
 
     # フィッティング
     mask_non = time_non >= t_shift
@@ -417,7 +417,7 @@ if __name__ == "__main__":
             
             # フィッティング曲線の描画
             y_fit_curve_n = exponential_decay_func(t_fit_n, a_n, b_n, lam_n, t_shift)
-            plt.plot(t_fit_n, y_fit_curve_n, '--', color='cyan', linewidth=2.5, 
+            plt.plot(t_fit_n, y_fit_curve_n, color='blue', linewidth=2.5, 
                      label=f'Fit Conventional ($\lambda={lam_n:.4f}$)')
             print(f"Conventional Lambda: {lam_n}")
         except Exception as e:

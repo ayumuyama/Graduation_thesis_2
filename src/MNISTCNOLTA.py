@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # =========================================================
     # 変更点1: 試したい eps の値をリストで定義
     # =========================================================
-    eps_list = [0.00004]  #ここ大事
+    eps_list = [0.00005, 0.00010, 0.00015, 0.00020, 0.00025, 0.00030, 0.00035, 0.00040, 0.00045, 0.00050, 0.00055, 0.00060, 0.00065, 0.00070, 0.00075, 0.00080]  #ここ大事
     
     # 変更点2: 評価するデータセットをリスト化してループ処理できるように整理
     eval_datasets = [
@@ -120,10 +120,10 @@ if __name__ == "__main__":
             # 各種ノイズなどの条件ごとにこの処理が呼ばれる箇所に配置します
 
             # 評価区間のインデックス設定 (Pythonのインデックスに合わせて設定)
-            phase1_start = 10000
-            phase1_end = 12500
-            phase2_start = 12500
-            phase2_end = 20000
+            phase1_start = 0
+            phase1_end = 2500
+            phase2_start = 2500
+            phase2_end = 10000
 
             # 提案手法の区間平均
             prop_phase1_mean = np.mean(acc_his_2[phase1_start:phase1_end])
@@ -135,8 +135,8 @@ if __name__ == "__main__":
 
             # 結果のコンソール出力
             print("\n=== Covariate Shift 後の区間平均精度 ===")
-            print(f"初期適応フェーズ (10000 - 12500) | Proposed: {prop_phase1_mean:.3f} | Conventional: {conv_phase1_mean:.3f}")
-            print(f"定常・回復フェーズ (12500 - 20000) | Proposed: {prop_phase2_mean:.3f} | Conventional: {conv_phase2_mean:.3f}")
+            print(f"初期適応フェーズ (0 - 2500) | Proposed: {prop_phase1_mean:.3f} | Conventional: {conv_phase1_mean:.3f}")
+            print(f"定常・回復フェーズ (2500 - 10000) | Proposed: {prop_phase2_mean:.3f} | Conventional: {conv_phase2_mean:.3f}")
             print("========================================\n")
 
             # =========================================================
